@@ -2324,18 +2324,56 @@ function openFilterReport(){
   generateFilterReport(matched);
 }
 
-function buildXlsx(allRows, headers) {
+function buildXlsx(allRows, headers, wrapCols) {
+  // wrapCols: Set of 0-based column indices that need wrap_text
+  wrapCols = wrapCols || new Set();
   const enc = new TextEncoder();
   const xlEsc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const colLetter = n => { let s=''; while(n){ s=String.fromCharCode(64+(n-1)%26+1)+s; n=Math.floor((n-1)/26); } return s; };
-  const buildRow = (ri,vals) => '<row r="'+ri+'">'+vals.map((v,ci)=>'<c r="'+colLetter(ci+1)+ri+'" t="inlineStr"><is><t>'+xlEsc(String(v||''))+'</t></is></c>').join('')+'</row>';
-  let rowsXml=buildRow(1,headers);
-  allRows.forEach((row,i)=>rowsXml+=buildRow(i+2,row));
+
+  // 换行内容用 <t xml:space="preserve"> + <r><t> 逐行拆分
+  const buildCell = (col, row, val) => {
+    const ref = colLetter(col+1) + row;
+    const s = String(val||'');
+    if(wrapCols.has(col) && s.includes('\n')){
+      // 自动换行单元格：样式 s="1"，用多个 <r><t> 表示分行
+      const lines = s.split('\n');
+      const runs = lines.map((l,i) =>
+        '<r>' + (i>0 ? '<rPh/>' : '') +
+        '<t xml:space="preserve">' + xlEsc(l) + (i<lines.length-1 ? '&#10;' : '') + '</t></r>'
+      ).join('');
+      // 实际上 xlsx 换行最简单方式：直接在 inlineStr 的 t 里用 &#10;，加 s="1" 开启 wrapText
+      const joined = xlEsc(s.replace(/\n/g, '\n')).replace(/\n/g,'&#10;');
+      return '<c r="'+ref+'" t="inlineStr" s="1"><is><t xml:space="preserve">'+joined+'</t></is></c>';
+    }
+    return '<c r="'+ref+'" t="inlineStr"><is><t>'+xlEsc(s)+'</t></is></c>';
+  };
+
+  const buildRow = (ri, vals) =>
+    '<row r="'+ri+'">'+vals.map((v,ci)=>buildCell(ci, ri, v)).join('')+'</row>';
+
+  let rowsXml = buildRow(1, headers);
+  allRows.forEach((row,i) => rowsXml += buildRow(i+2, row));
+
+  // styles.xml: xf[0]=default, xf[1]=wrapText
+  const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts><font><sz val="9"/><name val="Arial"/></font></fonts>' +
+    '<fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+    '<borders><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +  // s=0 default
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1" vertical="top"/></xf>' + // s=1 wrap
+    '</cellXfs>' +
+    '</styleSheet>';
+
   const files=[
-    ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'],
+    ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
     ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
     ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="\u62e9\u6821\u7b5b\u9009\u7ed3\u679c" sheetId="1" r:id="rId1"/></sheets></workbook>'],
-    ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ['xl/styles.xml', stylesXml],
     ['xl/worksheets/sheet1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>'+rowsXml+'</sheetData></worksheet>'],
   ];
   const crcT=new Uint32Array(256);
@@ -2400,8 +2438,15 @@ function generateFilterReport(schools){
   const HEADERS=['GE评级','州 State','学校名称（英文）','学校名称（中文）','亮点总结','托福最低','Duolingo','SSAT','面试方式','申请表格','申请费','申请截止日期','录取结果发布时间','类型','宗教','开设年级','全校学生数量','建校年份','是否开设PG','最高毕业年龄','国际生开放年级','住校学生比例','国际学生比例','中国学生数量/比例','师生比例','学制','12年级申请','SAT均分','AP/IB/CC数量','ESL','年费预估','费用说明','住宿安排','走读Homestay安排','是否直飞','官网',...(hasTravelCol?['车程距离','驾车时间']:[])];
   const FIELD_MAP=['GE评级','州 State','学校名称(School Name）','学校名称(中文）','亮点总结（Highlights）','TOEFL Mini. （以9年级为标准）','Duolingo','SSAT','Interview','App. Form','App. Fee','APP. DDL','申请材料齐全后录取结果发布时间','类型 Type','宗教 Religion','开设年级 Grades','全校学生数量 Student Body','建校时间 Found Year','是否开设PG year','最高毕业年龄(Age limit)','国际生年级Grades open for International students','住校学生数量 Boarding %','国际学生数量 International student %','中国学生数量Chinese Student %','师生比例 Teacher : Student','学制','12年级申请者(12th grade applicant)','SAT均分','#AP/#IB/#CC','ESL语言支持','费用预估（含学费+食宿）','费用说明（包括学费、住宿、三餐）Tuition and Fees','住宿安排 Dorm','走读Homestay 安排 (如果学校允许走读）','是否可以直飞','参考官网 Website'];
   const clean=v=>(v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
+  // 保留换行的字段（亮点总结 idx=4, 费用说明 idx=31）
+  const WRAP_FIELDS = new Set(['亮点总结（Highlights）','费用说明（包括学费、住宿、三餐）Tuition and Fees']);
+  const WRAP_COLS = new Set([4, 31]); // 对应 FIELD_MAP 中的列索引
+  const cleanWrap=v=>(v||'').toString().replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim();
   const rows=schools.map(s=>{
-    const vals=FIELD_MAP.map(field=>{
+    const vals=FIELD_MAP.map((field,fi)=>{
+      if(WRAP_FIELDS.has(field)){
+        return cleanWrap(s[field]||''); // 保留换行
+      }
       let v=clean(s[field]||'');
       if(field==='费用预估（含学费+食宿）'&&v){const n=parseFloat(v);if(!isNaN(n))v='$'+(n/10000).toFixed(1)+'万';}
       return v;
@@ -2409,7 +2454,7 @@ function generateFilterReport(schools){
     if(hasTravelCol){const tr=travelResults[clean(s['学校名称(School Name）'])];vals.push(tr?(tr.distText||tr.dist.toFixed(1)+'km'):'');vals.push(tr?tr.time:'');}
     return vals;
   });
-  const xlsx=buildXlsx(rows,HEADERS);
+  const xlsx=buildXlsx(rows,HEADERS,WRAP_COLS);
   const blob=new Blob([xlsx],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
