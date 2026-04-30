@@ -958,20 +958,16 @@ a.dtv-link:hover{text-decoration:underline;}
     <div class="ai-left">
       <div class="ai-form-title">输入任意查询需求，AI 将检索全部学校真实数据（推文、体育、艺术、亮点等），生成基于真实内容的专业报告</div>
 
-      <div class="ai-section-lbl">🤖 AI 服务选择</div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
+      
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
         <label class="ai-mode-btn" style="justify-content:flex-start;">
           <input type="radio" name="ai-provider" value="deepseek" checked>
-          <span>DeepSeek &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">api.deepseek.com</span></span>
+          <span>DeepSeek V4-Pro &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">api.deepseek.com</span></span>
         </label>
-        <label class="ai-mode-btn" style="justify-content:flex-start;">
-          <input type="radio" name="ai-provider" value="siliconflow">
-          <span>SiliconFlow DeepSeek-V3 &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">api.siliconflow.com</span></span>
-        </label>
-        <label class="ai-mode-btn" style="justify-content:flex-start;">
-          <input type="radio" name="ai-provider" value="claude">
-          <span>Claude Sonnet &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">timesniper.club</span></span>
-        </label>
+      </div>
+      <div style="margin-top:6px;margin-bottom:2px;">
+        <button onclick="testCurrentAPI()" style="width:100%;padding:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:rgba(255,255,255,.55);font-size:.72rem;cursor:pointer;font-family:'Noto Sans SC',sans-serif;transition:all .16s;" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='rgba(255,255,255,.15)';this.style.color='rgba(255,255,255,.55)'">🔌 测试当前 API 连通性</button>
+        <div id="api-test-result" style="margin-top:5px;font-size:.7rem;display:none;padding:6px 10px;border-radius:5px;line-height:1.5;"></div>
       </div>
 
       <div class="ai-section-lbl">💬 查询需求</div>
@@ -2566,9 +2562,7 @@ async function runAI(){
   const provider = document.querySelector('input[name="ai-provider"]:checked')?.value || 'deepseek';
   // API Keys are pre-configured
   const API_CONFIGS = {
-    deepseek:    { url:'https://api.deepseek.com/chat/completions',   key:'sk-4c3e0cdb678c435fba4d4917dcc16b91',                               model:'deepseek-chat',              type:'openai' },
-    siliconflow: { url:'https://api.siliconflow.com/v1/chat/completions', key:'sk-cjknmtdncilmgfzdobbypxkuvjcldjdbprmhrnzwhlmoncpw',           model:'deepseek-ai/DeepSeek-V3',    type:'openai' },
-    claude:      { url:'https://timesniper.club/v1/messages',          key:'sk-T6dUTsVHOh8nPmnPAa0BzVg9kLbOxCWAizV9RpMyRDnXJtHt',             model:'claude-sonnet-4-7',          type:'anthropic' },
+    deepseek: { url:'https://api.deepseek.com/chat/completions', key:'sk-4c3e0cdb678c435fba4d4917dcc16b91', model:'deepseek-v4-pro', type:'openai' },
   };
   const providerCfg = API_CONFIGS[provider];
 
@@ -2676,7 +2670,7 @@ ${schoolNameList}
     let schoolDataContext = '';
 
     if(finalMode === 'query'){
-      const MAX = isSpecific ? matchedSchools.length : 25;
+      const MAX = matchedSchools.length;
       const topSchools = matchedSchools.slice(0, MAX);
 
       schoolDataContext = topSchools.map(s => {
@@ -2703,7 +2697,7 @@ ${schoolNameList}
 
     } else {
       // 推荐模式
-      const MAX = 50;
+      const MAX = matchedSchools.length;
       schoolDataContext = matchedSchools.slice(0,MAX).map(s => {
         const name   = s['学校名称(School Name）'];
         const nameCn = s['学校名称(中文）'] || name;
@@ -2756,7 +2750,7 @@ ${schoolDataContext}
       "name_en": "学校英文名（与原始数据完全一致）",
       "name_cn": "学校中文名",
       "state": "州代码",
-      "project_detail": "基于真实推文的介绍（80-100字，涵盖项目特色、参与方式等，严格控制字数）",
+      "project_detail": "基于真实推文的介绍（200字以内，涵盖项目特色、参与方式等）",
       "highlights": ["亮点1", "亮点2", "亮点3"],
       "suitable_for": "适合什么学生（25字内）"
     }
@@ -2766,8 +2760,8 @@ ${schoolDataContext}
 
 注意：
 - project_detail 必须完全来自提供的原始数据，不得添加未提及的内容
-- 最多列出 10 所学校，优先选择推文内容最丰富的
-- 严格控制每条 project_detail 在100字以内，确保 JSON 完整输出`;
+- 输出全部提供的学校，不得遗漏任何一所，不限制学校数量
+- 每条 project_detail 控制在200字以内，无学校数量限制，全部输出`;
 
     } else {
       reportPrompt = `你是一位拥有20年经验的美国顶级寄宿高中择校顾问。
@@ -2791,7 +2785,7 @@ ${schoolDataContext}
       "name_en": "学校英文名",
       "name_cn": "学校中文名",
       "state": "州代码",
-      "reason": "推荐理由（80字，基于真实数据）",
+      "reason": "推荐理由（200字以内，基于真实数据）",
       "highlights": ["亮点1", "亮点2", "亮点3"],
       "concerns": "注意事项（40字内）"
     }
@@ -2799,7 +2793,7 @@ ${schoolDataContext}
   "advice": "综合建议（80字）"
 }
 
-推荐5-8所，type可用：强烈推荐/推荐/备选`;
+输出全部提供的学校，不得遗漏，不限制数量，type可用：强烈推荐/推荐/备选`;
     }
 
     setProgress(`📝 AI 正在生成「${searchTopic}」报告…`);
@@ -2898,28 +2892,77 @@ function stripMarkdown(text){
 
 async function callAI(cfg, prompt, maxTokens, systemPrompt){
   let resp, data;
-  if(cfg.type === 'anthropic'){
-    resp = await fetch(cfg.url,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,system:systemPrompt,
-        messages:[{role:'user',content:prompt}]})
+  const TIMEOUT_MS = 300000; // 300秒，V4-Pro大模型生成慢
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    resp = await fetch(cfg.url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + cfg.key
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        max_tokens: maxTokens,
+        messages: [
+          {role:'system', content: systemPrompt},
+          {role:'user',   content: prompt}
+        ]
+      })
     });
-    data = await resp.json();
-    if(data.error) throw new Error(data.error.message||'Anthropic API 错误');
-    data._text = data.content?.find(b=>b.type==='text')?.text||'';
-  } else {
-    resp = await fetch(cfg.url,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.key}`},
-      body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,
-        messages:[{role:'system',content:systemPrompt},{role:'user',content:prompt}]})
-    });
+    if(!resp.ok){ const t=await resp.text(); throw new Error('API错误 '+resp.status+': '+t.substring(0,300)); }
     data = await resp.json();
     if(data.error) throw new Error(data.error.message||'API 错误');
     data._text = data.choices?.[0]?.message?.content||'';
+  } catch(e) {
+    if(e.name==='AbortError') throw new Error('请求超时（超过5分钟），请稍后重试或减少查询范围');
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
   return data;
+}
+
+async function testCurrentAPI(){
+  const provider = document.querySelector('input[name="ai-provider"]:checked')?.value || 'deepseek';
+  const CFGS = {
+    deepseek:     { url:'https://api.deepseek.com/chat/completions',       key:'sk-4c3e0cdb678c435fba4d4917dcc16b91',                         model:'deepseek-v4-pro'             },
+    siliconflow:  { url:'https://api.siliconflow.com/v1/chat/completions', key:'sk-cjknmtdncilmgfzdobbypxkuvjcldjdbprmhrnzwhlmoncpw',       model:'deepseek-ai/DeepSeek-V3'     },
+    siliconflow2: { url:'https://api.siliconflow.com/v1/chat/completions', key:'sk-tbksayzopakytixvfhsavztcoxeqylhafsqaizxogbfqtott',       model:'deepseek-ai/DeepSeek-V4-Pro' },
+  };
+  const cfg = CFGS[provider];
+  const resEl = document.getElementById('api-test-result');
+  resEl.style.display='block';
+  resEl.style.background='rgba(255,255,255,.05)';
+  resEl.style.color='rgba(255,255,255,.5)';
+  resEl.textContent='⏳ 正在测试 ' + cfg.model + ' …';
+  const t0 = Date.now();
+  try {
+    const ctrl = new AbortController();
+    const tmr = setTimeout(()=>ctrl.abort(), 20000);
+    const resp = await fetch(cfg.url, {
+      method:'POST', signal:ctrl.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
+      body:JSON.stringify({model:cfg.model, max_tokens:20, messages:[{role:'user',content:'回复"ok"'}]})
+    });
+    clearTimeout(tmr);
+    const ms = Date.now()-t0;
+    if(!resp.ok){
+      const t=await resp.text();
+      resEl.style.background='rgba(139,58,58,.2)'; resEl.style.color='#e8a0a0';
+      resEl.textContent='❌ 连接失败 HTTP '+resp.status+' · '+t.substring(0,150);
+      return;
+    }
+    const d = await resp.json();
+    const reply = d.choices?.[0]?.message?.content||'(无回复)';
+    resEl.style.background='rgba(45,122,106,.2)'; resEl.style.color='#7dd4c4';
+    resEl.textContent='✅ 连接成功！模型: '+cfg.model+' · 响应时间: '+ms+'ms · 回复: '+reply;
+  } catch(e) {
+    resEl.style.background='rgba(139,58,58,.2)'; resEl.style.color='#e8a0a0';
+    resEl.textContent='❌ '+(e.name==='AbortError'?'连接超时（20秒）':e.message);
+  }
 }
 function searchByKeywords(keywords){
   const SEARCH_FIELDS = [
