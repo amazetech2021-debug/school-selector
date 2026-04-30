@@ -935,7 +935,7 @@ a.dtv-link:hover{text-decoration:underline;}
 <div class="travel-panel" id="travel-panel">
   <div class="travel-title">📍 车程筛选（真实驾车距离）<span id="travel-active-tag" style="display:none;background:var(--gold);color:var(--ink);font-size:.6rem;padding:2px 7px;border-radius:10px;font-weight:600;margin-left:4px;"></span></div>
   <div class="travel-input-row" style="flex-wrap:wrap;gap:6px;">
-    <input class="travel-input" id="gmaps-key" type="password" placeholder="🔑 Google Maps API Key（AIza…）" style="flex:0 0 220px;min-width:160px;">
+    <input class="travel-input" id="gmaps-key" type="hidden" value="AIzaSyCN8Del7W133_edbGJQkRuNzJXrMNqgacM">
     <input class="travel-input" id="travel-input" type="text" placeholder="出发地：如 5430 Torrance Blvd, CA / 纽约" style="flex:1;min-width:160px;">
     <button class="travel-btn" id="travel-btn" onclick="calcTravel()">查询</button>
     <button class="travel-btn" id="travel-clear-btn" onclick="clearTravel()" style="display:none;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);">清除</button>
@@ -958,10 +958,21 @@ a.dtv-link:hover{text-decoration:underline;}
     <div class="ai-left">
       <div class="ai-form-title">输入任意查询需求，AI 将检索全部学校真实数据（推文、体育、艺术、亮点等），生成基于真实内容的专业报告</div>
 
-      <div class="ai-section-lbl">🔑 DeepSeek API Key</div>
-      <input type="password" id="ai-apikey" class="ai-textarea"
-        style="resize:none;min-height:unset;padding:9px 12px;font-size:.78rem;"
-        placeholder="请输入 DeepSeek API Key（sk-…），在 platform.deepseek.com 申请">
+      <div class="ai-section-lbl">🤖 AI 服务选择</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
+        <label class="ai-mode-btn" style="justify-content:flex-start;">
+          <input type="radio" name="ai-provider" value="deepseek" checked>
+          <span>DeepSeek &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">api.deepseek.com</span></span>
+        </label>
+        <label class="ai-mode-btn" style="justify-content:flex-start;">
+          <input type="radio" name="ai-provider" value="siliconflow">
+          <span>SiliconFlow DeepSeek-V3 &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">api.siliconflow.com</span></span>
+        </label>
+        <label class="ai-mode-btn" style="justify-content:flex-start;">
+          <input type="radio" name="ai-provider" value="claude">
+          <span>Claude Sonnet &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">timesniper.club</span></span>
+        </label>
+      </div>
 
       <div class="ai-section-lbl">💬 查询需求</div>
       <textarea id="ai-input" class="ai-textarea" rows="5"
@@ -998,6 +1009,7 @@ a.dtv-link:hover{text-decoration:underline;}
       <div id="ai-download-area" style="display:none;margin-top:14px;">
         <div class="ai-section-lbl">📄 下载报告</div>
         <div style="display:flex;gap:8px;">
+          <button class="ai-dl-btn" onclick="downloadReport('xlsx')">⬇ Excel 表格</button>
           <button class="ai-dl-btn" onclick="downloadReport('docx')">⬇ Word 文档</button>
           <button class="ai-dl-btn" onclick="downloadReport('html')">⬇ HTML 报告</button>
         </div>
@@ -2111,7 +2123,7 @@ function calcTravel(){
   if(!rawInput){showTravelError('请输入出发地址或城市');return;}
 
   const apiKey = document.getElementById('gmaps-key').value.trim();
-  if(!apiKey){showTravelError('请先输入 Google Maps API Key');return;}
+  if(!apiKey){showTravelError('Google Maps API Key 配置有误，请联系管理员');return;}
 
   const loadingEl = document.getElementById('travel-loading');
   const errEl = document.getElementById('travel-error');
@@ -2550,8 +2562,15 @@ async function runAI(){
   if(!input || input.length < 5){
     showAIError('请输入查询需求（至少5个字）'); return;
   }
-  const apiKey = document.getElementById('ai-apikey').value.trim();
-  if(!apiKey){ showAIError('请先输入 DeepSeek API Key'); return; }
+  const apiKey = document.getElementById('ai-apikey') ? document.getElementById('ai-apikey').value.trim() : '';
+  const provider = document.querySelector('input[name="ai-provider"]:checked')?.value || 'deepseek';
+  // API Keys are pre-configured
+  const API_CONFIGS = {
+    deepseek:    { url:'https://api.deepseek.com/chat/completions',   key:'sk-4c3e0cdb678c435fba4d4917dcc16b91',                               model:'deepseek-chat',              type:'openai' },
+    siliconflow: { url:'https://api.siliconflow.com/v1/chat/completions', key:'sk-cjknmtdncilmgfzdobbypxkuvjcldjdbprmhrnzwhlmoncpw',           model:'deepseek-ai/DeepSeek-V3',    type:'openai' },
+    claude:      { url:'https://timesniper.club/v1/messages',          key:'sk-T6dUTsVHOh8nPmnPAa0BzVg9kLbOxCWAizV9RpMyRDnXJtHt',             model:'claude-sonnet-4-7',          type:'anthropic' },
+  };
+  const providerCfg = API_CONFIGS[provider];
 
   document.getElementById('ai-error').style.display='none';
   document.getElementById('ai-download-area').style.display='none';
@@ -2592,12 +2611,23 @@ ${schoolNameList}
 - scope：有target_schools则为specific，否则为all`;
 
     setProgress('🔍 解析指令中…');
-    const parseResp = await callDeepSeek(apiKey, parsePrompt, 800,
-      '你是指令解析器，严格输出JSON，不输出其他内容，不带markdown代码块。');
-    const parseText = parseResp.choices?.[0]?.message?.content || '';
+    const parseResp = await callAI(providerCfg, parsePrompt, 800,
+      '你是指令解析器。只输出纯JSON，不加任何markdown格式（不加```json```），不加说明文字，不加代码块标记。');
+    const parseText = stripMarkdown(parseResp._text || '');
     const parseMatch = parseText.match(/\{[\s\S]*\}/);
     if(!parseMatch) throw new Error('指令解析失败，请重试');
-    const parsed = JSON.parse(parseMatch[0]);
+    let parsed;
+    try {
+      parsed = JSON.parse(parseMatch[0]);
+    } catch(e) {
+      // 容错：清理控制字符、修复常见JSON问题后重试
+      const cleaned = parseMatch[0]
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'')  // 去除控制字符
+        .replace(/,\s*([}\]])/g,'$1')                        // 去除尾随逗号
+        .replace(/([{,]\s*)(\w+)\s*:/g,'$1"$2":');          // 给无引号key加引号
+      try { parsed = JSON.parse(cleaned); }
+      catch(e2) { throw new Error('指令解析失败（JSON格式异常），请重试'); }
+    }
 
     const targetSchools   = parsed.target_schools || [];
     const searchTopic     = parsed.search_topic || input;
@@ -2726,7 +2756,7 @@ ${schoolDataContext}
       "name_en": "学校英文名（与原始数据完全一致）",
       "name_cn": "学校中文名",
       "state": "州代码",
-      "project_detail": "基于真实推文的详细介绍（150-200字，涵盖项目水平、设施、特色、参与方式等）",
+      "project_detail": "基于真实推文的介绍（80-100字，涵盖项目特色、参与方式等，严格控制字数）",
       "highlights": ["亮点1", "亮点2", "亮点3"],
       "suitable_for": "适合什么学生（25字内）"
     }
@@ -2734,7 +2764,10 @@ ${schoolDataContext}
   "conclusion": "总结（2-3句话）"
 }
 
-注意：project_detail 必须完全来自提供的原始数据，逐字核查，不得添加未提及的内容。`;
+注意：
+- project_detail 必须完全来自提供的原始数据，不得添加未提及的内容
+- 最多列出 10 所学校，优先选择推文内容最丰富的
+- 严格控制每条 project_detail 在100字以内，确保 JSON 完整输出`;
 
     } else {
       reportPrompt = `你是一位拥有20年经验的美国顶级寄宿高中择校顾问。
@@ -2758,7 +2791,7 @@ ${schoolDataContext}
       "name_en": "学校英文名",
       "name_cn": "学校中文名",
       "state": "州代码",
-      "reason": "推荐理由（120字，基于真实数据）",
+      "reason": "推荐理由（80字，基于真实数据）",
       "highlights": ["亮点1", "亮点2", "亮点3"],
       "concerns": "注意事项（40字内）"
     }
@@ -2769,14 +2802,62 @@ ${schoolDataContext}
 推荐5-8所，type可用：强烈推荐/推荐/备选`;
     }
 
-    // ══ Step 4: 生成报告 ══
-    setProgress(`📝 DeepSeek 正在生成「${searchTopic}」报告…`);
-    const reportResp = await callDeepSeek(apiKey, reportPrompt, 4000,
-      '你是专业的美国高中教育顾问。严格按JSON格式输出，不带markdown代码块，不编造数据。');
-    const reportText = reportResp.choices?.[0]?.message?.content || '';
+    setProgress(`📝 AI 正在生成「${searchTopic}」报告…`);
+    const reportResp = await callAI(providerCfg, reportPrompt, 8000,
+      '你是专业的美国高中教育顾问。只输出纯JSON，绝对不加```json```代码块标记，不加任何说明文字，不编造数据，直接以{开头。');
+    const reportText = stripMarkdown(reportResp._text || '');
     const reportMatch = reportText.match(/\{[\s\S]*\}/);
     if(!reportMatch) throw new Error('报告生成格式异常，请重试');
-    const report = JSON.parse(reportMatch[0]);
+    let report;
+    try {
+      report = JSON.parse(reportMatch[0]);
+    } catch(e) {
+      // 容错：分步清理后重试
+      let raw = reportMatch[0];
+      // 1. 去除控制字符
+      raw = raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'');
+      // 2. 去除尾随逗号
+      raw = raw.replace(/,\s*([}\]])/g,'$1');
+      // 3. 修复被截断的 JSON（补全未闭合的结构）
+      // 统计缺少的 } 和 ]
+      let opens = 0, arrOpens = 0;
+      let inStr = false, esc = false;
+      for(let ci=0;ci<raw.length;ci++){
+        const ch = raw[ci];
+        if(esc){esc=false;continue;}
+        if(ch==='\\'){esc=true;continue;}
+        if(ch==='"'){inStr=!inStr;continue;}
+        if(inStr)continue;
+        if(ch==='{')opens++;
+        else if(ch==='}')opens--;
+        else if(ch==='[')arrOpens++;
+        else if(ch===']')arrOpens--;
+      }
+      // 截断到最后一个完整值结尾（最后一个 , 之前）
+      const lastComma = raw.lastIndexOf('",');
+      const lastBrace = raw.lastIndexOf('"}');
+      if(opens > 0 && lastBrace > 0){
+        // 截断到最后完整对象后，补全关闭括号
+        let cutPoint = Math.max(lastComma, lastBrace);
+        if(lastBrace > lastComma) cutPoint = lastBrace + 2;
+        else cutPoint = lastComma + 1;
+        raw = raw.slice(0, cutPoint);
+        for(let i=0;i<arrOpens;i++) raw += ']';
+        for(let i=0;i<opens;i++) raw += '}';
+      }
+      try { report = JSON.parse(raw); }
+      catch(e2) {
+        // 最终兜底：提取已解析的部分
+        const titleM = raw.match(/"title"\s*:\s*"([^"]+)"/);
+        const summaryM = raw.match(/"summary"\s*:\s*"([^"]+)"/);
+        report = {
+          title: titleM?titleM[1]:'查询报告',
+          summary: summaryM?summaryM[1]:'内容已生成但JSON被截断，请减少查询学校数量后重试。',
+          schools:[],
+          conclusion:'提示：查询学校过多导致输出超限，建议每次查询不超过8所学校。'
+        };
+      }
+    }
 
     lastAIReport = {
       report, mode: finalMode, query: input,
@@ -2804,21 +2885,40 @@ function showAIError(text){
   const el = document.getElementById('ai-error');
   el.textContent = text; el.style.display='block';
 }
-async function callDeepSeek(apiKey, prompt, maxTokens, systemPrompt){
-  const resp = await fetch('https://api.deepseek.com/chat/completions',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body:JSON.stringify({
-      model:'deepseek-chat',
-      max_tokens: maxTokens,
-      messages:[
-        {role:'system', content: systemPrompt},
-        {role:'user', content: prompt}
-      ]
-    })
-  });
-  const data = await resp.json();
-  if(data.error) throw new Error(data.error.message || 'API错误');
+// ── 剥离 AI 返回的 markdown 代码块 ──
+function stripMarkdown(text){
+  // 去除 ```json...``` 或 ```...``` 包裹（含多行）
+  text = text.replace(/^```[a-zA-Z]*\s*/,'').replace(/\s*```\s*$/,'');
+  // 去除中间残留的 ``` 标记
+  text = text.replace(/```[a-zA-Z]*/g,'').replace(/```/g,'');
+  // 去除控制字符（保留换行和制表符）
+  text = text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'');
+  return text.trim();
+}
+
+async function callAI(cfg, prompt, maxTokens, systemPrompt){
+  let resp, data;
+  if(cfg.type === 'anthropic'){
+    resp = await fetch(cfg.url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,system:systemPrompt,
+        messages:[{role:'user',content:prompt}]})
+    });
+    data = await resp.json();
+    if(data.error) throw new Error(data.error.message||'Anthropic API 错误');
+    data._text = data.content?.find(b=>b.type==='text')?.text||'';
+  } else {
+    resp = await fetch(cfg.url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.key}`},
+      body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,
+        messages:[{role:'system',content:systemPrompt},{role:'user',content:prompt}]})
+    });
+    data = await resp.json();
+    if(data.error) throw new Error(data.error.message||'API 错误');
+    data._text = data.choices?.[0]?.message?.content||'';
+  }
   return data;
 }
 function searchByKeywords(keywords){
@@ -2951,6 +3051,60 @@ function downloadReport(format){
   if(!lastAIReport) return;
   if(format==='html') downloadAIHTML();
   else if(format==='docx') downloadAIDocx();
+  else if(format==='xlsx') downloadAIXlsx();
+}
+
+function downloadAIXlsx(){
+  const {report, mode, query, matchCount, generatedAt} = lastAIReport;
+  const isQuery = mode === 'query';
+
+  // Build rows: one school per row
+  const HEADERS = isQuery
+    ? ['序号','学校名称（英文）','学校名称（中文）','州','项目详情','核心亮点','适合学生']
+    : ['序号','推荐类型','学校名称（英文）','学校名称（中文）','州','年费预估','GE评级','FS排名','托福要求','推荐理由','核心亮点','注意事项'];
+
+  const rows = (report.schools||[]).map((s,i)=>{
+    const idx = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===s.name_en);
+    const sc = idx>=0 ? SCHOOLS[idx] : {};
+    const cost = sc['费用预估（含学费+食宿）'] ? '$'+(parseFloat(sc['费用预估（含学费+食宿）'])/10000).toFixed(1)+'万' : '';
+    const clean = v => (v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
+    if(isQuery){
+      return [
+        i+1,
+        clean(s.name_en), clean(s.name_cn||s.name_en), clean(s.state||sc['州 State']||''),
+        clean(s.project_detail||''),
+        clean((s.highlights||[]).join('；')),
+        clean(s.suitable_for||'')
+      ];
+    } else {
+      return [
+        s.rank, clean(s.type||''),
+        clean(s.name_en), clean(s.name_cn||s.name_en), clean(s.state||sc['州 State']||''),
+        cost,
+        clean(sc['GE评级']||''),
+        sc['2026 FS排名'] ? '#'+sc['2026 FS排名'] : '',
+        clean(sc['TOEFL Mini. （以9年级为标准）']||''),
+        clean(s.reason||''),
+        clean((s.highlights||[]).join('；')),
+        clean(s.concerns||'')
+      ];
+    }
+  });
+
+  // Add summary row at top
+  const summaryRow = isQuery
+    ? [`查询：${query}`, `匹配${matchCount}所学校`, `生成时间：${generatedAt}`, report.summary||'', '', '', '']
+    : [`查询：${query}`, `匹配${matchCount}所学校`, `生成时间：${generatedAt}`, report.student_profile||'', report.strategy||'', report.advice||'', '', '', '', '', '', ''];
+
+  const allRows = [summaryRow, ...rows];
+  const xlsx = buildXlsx(allRows, HEADERS);
+  const title = report.title || (isQuery ? '专项查询报告' : '择校推荐报告');
+  const blob = new Blob([xlsx], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${title}_${generatedAt.replace(/[/: ]/g,'-')}.xlsx`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),30000);
 }
 
 function downloadAIHTML(){
