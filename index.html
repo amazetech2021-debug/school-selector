@@ -557,6 +557,15 @@ a.dtv-link:hover{text-decoration:underline;}
 }
 .ai-view-btn:hover{background:var(--gold);color:var(--ink);}
 .ai-school-bd{padding:12px 16px;}
+.ai-fixed-info{padding:8px 16px 6px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.14);}
+.ai-info-grid{display:flex;flex-wrap:wrap;gap:5px 14px;margin-bottom:5px;}
+.ai-info-item{display:flex;align-items:center;gap:4px;font-size:.7rem;}
+.ai-info-lbl{color:rgba(255,255,255,.32);flex-shrink:0;}
+.ai-info-val{color:rgba(255,255,255,.72);font-weight:500;}
+.ai-ge-tag{color:var(--gold);font-weight:700;}
+.ai-info-hl{display:flex;gap:6px;align-items:flex-start;margin-top:2px;margin-bottom:2px;font-size:.7rem;line-height:1.6;}
+.ai-info-hl .ai-info-lbl{flex-shrink:0;padding-top:1px;}
+.ai-info-hl-val{color:rgba(255,255,255,.5);white-space:normal;line-height:1.7;}
 .ai-reason{font-size:.78rem;color:rgba(255,255,255,.65);line-height:1.7;}
 .ai-reason strong{color:var(--gold);}
 .ai-match-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
@@ -1015,7 +1024,7 @@ a.dtv-link:hover{text-decoration:underline;}
       <div id="ai-result-inner">
         <div class="ai-placeholder">
           <div style="font-size:2.5rem;margin-bottom:12px;">🔍</div>
-          <div style="color:rgba(255,255,255,.35);font-size:.88rem;line-height:2;">输入查询需求<br>AI 检索 225 所学校的真实推文数据<br>生成基于事实的专业报告</div>
+          <div style="color:rgba(255,255,255,.35);font-size:.88rem;line-height:2;">输入查询需求<br>AI 检索 <span id="ai-school-count"></span> 所学校的真实推文数据<br>生成基于事实的专业报告</div>
         </div>
       </div>
     </div>
@@ -2469,6 +2478,9 @@ function openAI(){
   document.getElementById('ai-panel').classList.add('open');
   document.getElementById('ai-panel').scrollTop=0;
   document.body.style.overflow='hidden';
+  // 动态更新学校数量
+  const cnt = document.getElementById('ai-school-count');
+  if(cnt) cnt.textContent = SCHOOLS.length;
 }
 function closeAI(){
   document.getElementById('ai-panel').classList.remove('open');
@@ -2697,7 +2709,7 @@ ${schoolNameList}
       }
     } else {
       // 全库关键词搜索
-      setProgress(`🔍 在 225 所学校中搜索「${searchTopic}」…`);
+      setProgress(`🔍 在 ${SCHOOLS.length} 所学校中搜索「${searchTopic}」…`);
       matchedSchools = searchByKeywords(searchKeywords);
     }
 
@@ -3057,15 +3069,71 @@ function extractByKeywords(s, keywords){
 function renderReport(report, mode){
   let html='';
 
+  // ── 固定信息栏：从 SCHOOLS 数据中提取固定显示字段 ──
+  const getFixedInfo = (name_en) => {
+    const idx = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===name_en);
+    if(idx<0) return {idx:-1, infoHtml:''};
+    const sc = SCHOOLS[idx];
+    const T = f => (sc[f]||'').toString().trim();
+    const H = v => v && v!=='0' && v!=='nan';
+
+    // GE 评级
+    const ge = T('GE评级');
+    const geHtml = H(ge) ? `<div class="ai-info-item"><span class="ai-info-lbl">GE评级</span><span class="ai-info-val ai-ge-tag">${ge}</span></div>` : '';
+
+    // 类型
+    const type = T('类型 Type');
+    const typeHtml = H(type) ? `<div class="ai-info-item"><span class="ai-info-lbl">类型</span><span class="ai-info-val">${type}</span></div>` : '';
+
+    // 宗教
+    const rel = T('宗教 Religion');
+    const relHtml = H(rel) ? `<div class="ai-info-item"><span class="ai-info-lbl">宗教</span><span class="ai-info-val">${rel}</span></div>` : '';
+
+    // 学校人数
+    const body = T('全校学生数量 Student Body');
+    const bodyHtml = H(body) ? `<div class="ai-info-item"><span class="ai-info-lbl">学生人数</span><span class="ai-info-val">${body}人</span></div>` : '';
+
+    // 国际生年级
+    const intlG = T('国际生年级Grades open for International students');
+    const intlGHtml = H(intlG) ? `<div class="ai-info-item"><span class="ai-info-lbl">国际生年级</span><span class="ai-info-val">${intlG}</span></div>` : '';
+
+    // 年费（用 getCost 格式：$6.5万/年）
+    const costDisp = getCost(sc);
+    const costHtml = (costDisp && costDisp!=='—') ? `<div class="ai-info-item"><span class="ai-info-lbl">年费（含食宿）</span><span class="ai-info-val" style="color:#c9a84c;font-weight:600;">${costDisp}</span></div>` : '';
+
+    // 临近城市
+    const city = T('临近城市(Nearby City)').replace(/；\s*$/, '');
+    const cityHtml = H(city) ? `<div class="ai-info-item"><span class="ai-info-lbl">临近城市</span><span class="ai-info-val">${city}</span></div>` : '';
+
+    // 课程体系
+    const curr = T('课程体系');
+    const currHtml = H(curr) ? `<div class="ai-info-item"><span class="ai-info-lbl">课程体系</span><span class="ai-info-val">${curr}</span></div>` : '';
+
+    // 托福最低
+    const toefl = T('TOEFL Mini. （以9年级为标准）');
+    const toeflHtml = H(toefl) ? `<div class="ai-info-item"><span class="ai-info-lbl">托福最低</span><span class="ai-info-val">${toefl}</span></div>` : '';
+
+    // 学校亮点（取前100字）
+    const hl = T('亮点总结（Highlights）');
+    const hlSafe = hl.replace(/\n/g,'<br>');
+    const hlHtml = H(hl) ? `<div class="ai-info-hl"><span class="ai-info-lbl">学校亮点</span><span class="ai-info-hl-val">${hlSafe}</span></div>` : '';
+
+    const infoHtml = `<div class="ai-fixed-info">
+      <div class="ai-info-grid">${geHtml}${typeHtml}${relHtml}${bodyHtml}${intlGHtml}${costHtml}${toeflHtml}${cityHtml}${currHtml}</div>
+      ${hlHtml}
+    </div>`;
+
+    return {idx, infoHtml};
+  };
+
   if(mode==='query'){
-    // 专项查询报告
     html+=`<div class="ai-result-header">📋 ${report.title||'专项查询报告'}</div>`;
     html+=`<div class="ai-result-sub">基于 ${lastAIReport.matchCount} 所学校真实数据 · ${lastAIReport.generatedAt}</div>`;
     if(report.summary) html+=`<div class="ai-summary-box">${report.summary}</div>`;
 
     (report.schools||[]).forEach((s,i)=>{
-      const idx=SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===s.name_en);
-      const badges=idx>=0?getBadges(SCHOOLS[idx]):'';
+      const {idx, infoHtml} = getFixedInfo(s.name_en);
+      const badges = idx>=0 ? getBadges(SCHOOLS[idx]) : '';
       const highlights=(s.highlights||[]).map(h=>`<span class="ai-match-tag">✓ ${h}</span>`).join('');
       html+=`<div class="ai-school-card">
         <div class="ai-school-hd">
@@ -3077,6 +3145,7 @@ function renderReport(report, mode){
           </div>
           ${idx>=0?`<button class="ai-view-btn" onclick="viewFromAI(${idx})">查看详情 →</button>`:''}
         </div>
+        ${infoHtml}
         <div class="ai-school-bd">
           <div class="ai-reason">${s.project_detail||''}</div>
           ${highlights?`<div class="ai-match-tags" style="margin-top:8px;">${highlights}</div>`:''}
@@ -3088,7 +3157,6 @@ function renderReport(report, mode){
     if(report.conclusion) html+=`<div class="ai-summary-box"><strong style="color:var(--gold);">总结建议</strong><br>${report.conclusion}</div>`;
 
   } else {
-    // 择校推荐报告
     const typeColors={'强烈推荐':'#e8a0a0','推荐':'#a8d4a0','备选':'#9ab8e0'};
     const typeBg={'强烈推荐':'rgba(139,58,58,.2)','推荐':'rgba(74,103,65,.2)','备选':'rgba(66,99,150,.2)'};
 
@@ -3098,8 +3166,8 @@ function renderReport(report, mode){
     if(report.strategy) html+=`<div class="ai-summary-box" style="margin-top:-8px;"><strong style="color:var(--gold);">择校思路</strong><br>${report.strategy}</div>`;
 
     (report.schools||[]).forEach(s=>{
-      const idx=SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===s.name_en);
-      const badges=idx>=0?getBadges(SCHOOLS[idx]):'';
+      const {idx, infoHtml} = getFixedInfo(s.name_en);
+      const badges = idx>=0 ? getBadges(SCHOOLS[idx]) : '';
       const tColor=typeColors[s.type]||'#ccc';
       const tBg=typeBg[s.type]||'rgba(255,255,255,.1)';
       const highlights=(s.highlights||[]).map(h=>`<span class="ai-match-tag">✓ ${h}</span>`).join('');
@@ -3114,6 +3182,7 @@ function renderReport(report, mode){
           </div>
           ${idx>=0?`<button class="ai-view-btn" onclick="viewFromAI(${idx})">查看详情 →</button>`:''}
         </div>
+        ${infoHtml}
         <div class="ai-school-bd">
           <div class="ai-reason">${s.reason}</div>
           ${highlights?`<div class="ai-match-tags" style="margin-top:8px;">${highlights}</div>`:''}
@@ -3142,192 +3211,142 @@ function downloadReport(format){
   else if(format==='xlsx') downloadAIXlsx();
 }
 
-function downloadAIXlsx(){
+function downloadAIHTML(){
   const {report, mode, query, matchCount, generatedAt} = lastAIReport;
-  const isQuery = mode === 'query';
+  const isQuery = mode==='query';
+  const title = isQuery ? (report.title||'专项查询报告') : '择校推荐报告';
 
-  // Build rows: one school per row
-  const HEADERS = isQuery
-    ? ['序号','学校名称（英文）','学校名称（中文）','州','项目详情','核心亮点','适合学生']
-    : ['序号','推荐类型','学校名称（英文）','学校名称（中文）','州','年费预估','GE评级','FS排名','托福要求','推荐理由','核心亮点','注意事项'];
+  // 直接取页面已渲染好的内容
+  const renderedHTML = document.getElementById('ai-result-inner').innerHTML;
 
-  const rows = (report.schools||[]).map((s,i)=>{
-    const idx = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===s.name_en);
-    const sc = idx>=0 ? SCHOOLS[idx] : {};
-    const cost = sc['费用预估（含学费+食宿）'] ? '$'+(parseFloat(sc['费用预估（含学费+食宿）'])/10000).toFixed(1)+'万' : '';
-    const clean = v => (v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
-    if(isQuery){
-      return [
-        i+1,
-        clean(s.name_en), clean(s.name_cn||s.name_en), clean(s.state||sc['州 State']||''),
-        clean(s.project_detail||''),
-        clean((s.highlights||[]).join('；')),
-        clean(s.suitable_for||'')
-      ];
-    } else {
-      return [
-        s.rank, clean(s.type||''),
-        clean(s.name_en), clean(s.name_cn||s.name_en), clean(s.state||sc['州 State']||''),
-        cost,
-        clean(sc['GE评级']||''),
-        sc['2026 FS排名'] ? '#'+sc['2026 FS排名'] : '',
-        clean(sc['TOEFL Mini. （以9年级为标准）']||''),
-        clean(s.reason||''),
-        clean((s.highlights||[]).join('；')),
-        clean(s.concerns||'')
-      ];
-    }
-  });
+  // 收集页面 CSS
+  let styles = '';
+  try {
+    styles = [...document.styleSheets].map(ss=>{
+      try{ return [...ss.cssRules].map(r=>r.cssText).join('\n'); }catch(e){return '';}
+    }).join('\n');
+  } catch(e){}
 
-  // Add summary row at top
-  const summaryRow = isQuery
-    ? [`查询：${query}`, `匹配${matchCount}所学校`, `生成时间：${generatedAt}`, report.summary||'', '', '', '']
-    : [`查询：${query}`, `匹配${matchCount}所学校`, `生成时间：${generatedAt}`, report.student_profile||'', report.strategy||'', report.advice||'', '', '', '', '', '', ''];
+  const out = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<title>${title} · ${generatedAt}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{background:#12121f !important;color:#e8e2d8 !important;}
+body{font-family:'Microsoft YaHei','PingFang SC',Arial,sans-serif;max-width:980px;margin:0 auto;padding:24px;}
+${styles}
+/* 强制覆盖关键颜色，确保深色主题正确显示 */
+body,#ai-result-inner{background:#12121f !important;color:#e8e2d8 !important;}
+.ai-school-card{background:rgba(255,255,255,.04) !important;border:1px solid rgba(201,168,76,.2) !important;border-radius:10px;margin-bottom:14px;overflow:hidden;}
+.ai-school-hd{background:linear-gradient(90deg,rgba(201,168,76,.08),transparent) !important;padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,.06);}
+.ai-school-cn{color:#e8d5a3 !important;font-size:.96rem;font-weight:700;}
+.ai-school-en{color:rgba(255,255,255,.45) !important;font-size:.72rem;}
+.ai-school-rank{color:rgba(201,168,76,.3) !important;font-size:1.8rem;font-weight:700;}
+.ai-fixed-info{background:rgba(0,0,0,.2) !important;border-bottom:1px solid rgba(255,255,255,.05);padding:8px 16px 6px;}
+.ai-info-lbl{color:rgba(255,255,255,.35) !important;}
+.ai-info-val{color:rgba(255,255,255,.75) !important;font-weight:500;}
+.ai-ge-tag{color:#c9a84c !important;font-weight:700;}
+.ai-info-hl-val{color:rgba(255,255,255,.55) !important;white-space:normal;line-height:1.7;}
+.ai-school-bd{padding:12px 16px;}
+.ai-reason{font-size:.78rem;color:rgba(255,255,255,.65) !important;line-height:1.7;}
+.ai-match-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.ai-match-tag{background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:rgba(201,168,76,.85) !important;font-size:.68rem;padding:3px 8px;border-radius:12px;}
+.ai-result-header{font-size:1.15rem;font-weight:700;color:#c9a84c !important;padding-bottom:8px;border-bottom:2px solid rgba(201,168,76,.3);margin-bottom:8px;}
+.ai-result-sub{font-size:.74rem;color:rgba(255,255,255,.35) !important;margin-bottom:16px;}
+.ai-summary-box{background:rgba(255,255,255,.04) !important;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:.8rem;color:rgba(255,255,255,.65) !important;line-height:1.8;}
+.ai-summary-box strong{color:#c9a84c !important;}
+</style>
+</head><body>
+<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d4a);padding:22px 28px;border-radius:10px;margin-bottom:20px;border-bottom:3px solid #c9a84c;">
+  <h1 style="font-size:1.3rem;color:#e8d5a3;margin-bottom:4px;">🎓 ${title}</h1>
+  <p style="font-size:.74rem;color:rgba(255,255,255,.4);">智能美高择校系统 · 基于真实学校数据 · ${generatedAt}</p>
+  <span style="display:inline-block;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.2);color:#c9a84c;padding:3px 10px;border-radius:4px;font-size:.73rem;margin-top:6px;">查询：${query} · 匹配 ${matchCount} 所学校</span>
+</div>
+<div id="ai-result-inner">${renderedHTML}</div>
+<div style="text-align:center;padding:16px;color:rgba(255,255,255,.2);font-size:.68rem;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);">本报告由智能美高择校系统 AI 顾问基于真实学校数据生成，仅供参考。</div>
+</body></html>`;
 
-  const allRows = [summaryRow, ...rows];
-  const xlsx = buildXlsx(allRows, HEADERS);
-  const title = report.title || (isQuery ? '专项查询报告' : '择校推荐报告');
-  const blob = new Blob([xlsx], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const blob = new Blob([out],{type:'text/html;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${title}_${generatedAt.replace(/[/: ]/g,'-')}.xlsx`;
+  a.download = `${title}_${generatedAt.replace(/[/: ]/g,'-')}.html`;
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),30000);
 }
 
-function downloadAIHTML(){
-  const {report, mode, query, matchCount, generatedAt}=lastAIReport;
-  const isQuery=mode==='query';
-
-  let schoolsHTML=(report.schools||[]).map((s,i)=>{
-    const idx=SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===s.name_en);
-    const sc=idx>=0?SCHOOLS[idx]:{};
-    const extraInfo=idx>=0?`
-      <div class="school-meta">
-        <span>📍 ${sc['州 State']||''} ${sc['临近城市(Nearby City)']||''}</span>
-        <span>💰 ${sc['费用']||''}</span>
-        <span>📊 GE: ${sc['GE评级']||'—'}</span>
-        ${sc['2026 FS排名']?`<span>FS: #${sc['2026 FS排名']}</span>`:''}
-      </div>`:'' ;
-    const mainContent=isQuery?s.project_detail:s.reason;
-    const typeLabel=isQuery?'':`<span class="school-type">${s.type||''}</span>`;
-    const suitableFor=isQuery&&s.suitable_for?`<div class="suitable">👤 适合：${s.suitable_for}</div>`:'';
-    const highlights=(s.highlights||[]).map(h=>`<li>${h}</li>`).join('');
-
-    return `<div class="school-card">
-      <div class="school-header">
-        <span class="school-rank">${isQuery?i+1:s.rank}</span>
-        <div class="school-names">
-          ${typeLabel}
-          <div class="school-cn">${s.name_cn||s.name_en}</div>
-          <div class="school-en">${s.name_en}</div>
-          ${extraInfo}
-        </div>
-      </div>
-      <div class="school-body">
-        <p class="reason">${mainContent||''}</p>
-        ${highlights?`<ul class="highlights">${highlights}</ul>`:''}
-        ${suitableFor}
-        ${s.concerns?`<div class="concerns">⚠️ ${s.concerns}</div>`:''}
-      </div>
-    </div>`;
-  }).join('');
-
-  const title=isQuery?(report.title||'专项查询报告'):'择校推荐报告';
-  const introHTML=isQuery?
-    `${report.summary?`<div class="section"><div class="section-title">概述</div><p class="summary-text">${report.summary}</p></div>`:''}`:
-    `${report.student_profile?`<div class="section"><div class="section-title">需求解读</div><p class="summary-text">${report.student_profile}</p></div>`:''}
-     ${report.strategy?`<div class="section"><div class="section-title">择校思路</div><p class="summary-text">${report.strategy}</p></div>`:''}`;
-  const conclusionHTML=isQuery?
-    (report.conclusion?`<div class="advice-box"><div class="section-title">总结建议</div><p>${report.conclusion}</p></div>`:''):
-    (report.advice?`<div class="advice-box"><div class="section-title">顾问建议</div><p>${report.advice}</p></div>`:'');
-
-  const html=`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
-<title>${title} · ${generatedAt}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Microsoft YaHei',Arial,sans-serif;background:#f5f2ec;color:#1a1a2e;max-width:900px;margin:0 auto;padding:20px;}
-.header{background:linear-gradient(135deg,#1a1a2e,#2d2d4a);color:#fff;padding:28px 32px;border-radius:10px;margin-bottom:20px;border-bottom:3px solid #c9a84c;}
-.header h1{font-size:1.4rem;color:#e8d5a3;margin-bottom:4px;}
-.header p{font-size:.75rem;color:rgba(255,255,255,.4);}
-.section{background:#fff;border-radius:8px;padding:16px 20px;margin-bottom:14px;border:1px solid #e8e2d8;}
-.section-title{font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:#c9a84c;margin-bottom:8px;font-weight:600;}
-.summary-text{font-size:.84rem;color:#444;line-height:1.8;}
-.school-card{background:#fff;border:1px solid #e8e2d8;border-radius:8px;margin-bottom:12px;overflow:hidden;}
-.school-header{padding:14px 16px 10px;background:linear-gradient(90deg,rgba(201,168,76,.06),transparent);border-bottom:1px solid #f0ebe0;display:flex;gap:10px;align-items:flex-start;}
-.school-rank{font-size:1.8rem;font-weight:700;color:rgba(201,168,76,.3);font-family:serif;line-height:1;flex-shrink:0;}
-.school-names{flex:1;}
-.school-type{font-size:.62rem;padding:2px 7px;border-radius:4px;font-weight:600;display:inline-block;margin-bottom:4px;background:rgba(74,103,65,.15);color:#27ae60;}
-.school-cn{font-size:.96rem;font-weight:700;color:#1a1a2e;}
-.school-en{font-size:.72rem;color:#999;margin-top:2px;}
-.school-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;}
-.school-meta span{font-size:.67rem;color:#888;background:#f5f2ec;padding:2px 7px;border-radius:4px;}
-.school-body{padding:12px 16px;}
-.reason{font-size:.82rem;color:#444;line-height:1.75;}
-.highlights{margin:8px 0 0 18px;}
-.highlights li{font-size:.76rem;color:#666;line-height:1.6;margin-bottom:2px;}
-.suitable{font-size:.74rem;color:#888;margin-top:8px;}
-.concerns{font-size:.72rem;color:#888;margin-top:8px;background:#fafafa;padding:6px 10px;border-radius:5px;border-left:2px solid #ddd;}
-.advice-box{background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:14px 18px;margin-top:12px;}
-.advice-box p{font-size:.84rem;color:#555;line-height:1.8;}
-.footer{text-align:center;padding:16px;color:#bbb;font-size:.7rem;margin-top:8px;}
-.query-tag{display:inline-block;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.2);color:#c9a84c;padding:3px 10px;border-radius:4px;font-size:.75rem;margin-top:6px;}
-</style></head><body>
-<div class="header">
-  <h1>🎓 ${title}</h1>
-  <p>智能美高择校系统 · 基于真实学校数据 · ${generatedAt}</p>
-  <div class="query-tag">查询：${query} · 匹配 ${matchCount} 所学校</div>
-</div>
-${introHTML}
-<div class="section">
-  <div class="section-title">学校列表（${(report.schools||[]).length} 所）</div>
-  ${schoolsHTML}
-</div>
-${conclusionHTML}
-<div class="footer">本报告由智能美高择校系统 AI 顾问基于真实学校数据生成，仅供参考。</div>
-</body></html>`;
-
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`${title}_${generatedAt.replace(/[/: ]/g,'-')}.html`;
-  a.click();
-}
-
 function downloadAIDocx(){
-  const {report,mode,query,matchCount,generatedAt}=lastAIReport;
-  const isQuery=mode==='query';
-  const title=isQuery?(report.title||'专项查询报告'):'择校推荐报告';
+  const {report, mode, query, matchCount, generatedAt} = lastAIReport;
+  const isQuery = mode==='query';
+  const title = isQuery ? (report.title||'专项查询报告') : '择校推荐报告';
+
+  const getSchoolInfo = name_en => {
+    const i = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===name_en);
+    return i>=0 ? SCHOOLS[i] : null;
+  };
+  const T = (sc,f) => sc ? (sc[f]||'').toString().trim() : '';
+  const H = v => v && v!=='0' && v!=='nan';
+
+  const infoTable = sc => {
+    if(!sc) return '';
+    const ge=T(sc,'GE评级'), type=T(sc,'类型 Type'), rel=T(sc,'宗教 Religion');
+    const body=T(sc,'全校学生数量 Student Body');
+    const intlG=T(sc,'国际生年级Grades open for International students');
+    const toefl=T(sc,'TOEFL Mini. （以9年级为标准）');
+    const hl=T(sc,'亮点总结（Highlights）');
+    const costRaw=T(sc,'费用预估（含学费+食宿）');
+    const cost=costRaw&&!isNaN(parseFloat(costRaw))?'$'+(parseFloat(costRaw)/10000).toFixed(1)+'万/年':(T(sc,'费用')||'—');
+    const hlRows=hl?hl.split('\n').filter(l=>l.trim()).map(l=>`<p style="margin:1pt 0;font-size:9pt;">${l}</p>`).join(''):'';
+    return `<table style="width:100%;border-collapse:collapse;margin:5pt 0 3pt;font-size:9pt;">
+<tr>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;width:48pt;">GE评级</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;color:#b5860d;font-weight:700;">${H(ge)?ge:'—'}</td>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;width:48pt;">类型</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${H(type)?type:'—'}</td>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;width:48pt;">宗教</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${H(rel)?rel:'—'}</td>
+</tr>
+<tr>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;">学生人数</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${H(body)?body+'人':'—'}</td>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;">国际生年级</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${H(intlG)?intlG:'—'}</td>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;">年费预估</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${cost}</td>
+</tr>
+<tr>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;">托福最低</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${H(toefl)?toefl:'—'}</td>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;">课程体系</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${T(sc,'课程体系')||'—'}</td>
+  <td style="background:#f0ede4;padding:3pt 5pt;font-weight:600;color:#888;border:1pt solid #ddd;">临近城市</td>
+  <td style="padding:3pt 5pt;border:1pt solid #ddd;">${(T(sc,'临近城市(Nearby City)')||'—').replace(/；\s*$/,'')}</td>
+</tr>
+</table>
+${hlRows?`<div style="background:#faf8f4;border-left:3pt solid #c9a84c;padding:5pt 8pt;margin:3pt 0 6pt;"><b style="color:#888;font-size:9pt;">学校亮点：</b>${hlRows}</div>`:''}`;
+  };
 
   let content=`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
-<head><meta charset='utf-8'>
-<style>
+<head><meta charset='utf-8'><style>
 body{font-family:'宋体',serif;font-size:11pt;margin:2cm;}
 h1{font-size:16pt;color:#1a1a2e;text-align:center;border-bottom:2px solid #c9a84c;padding-bottom:6pt;}
-h2{font-size:12pt;color:#c9a84c;margin-top:12pt;}
-h3{font-size:11pt;color:#1a1a2e;}
-p{line-height:1.8;margin:5pt 0;}
-.block{border:1pt solid #ddd;padding:8pt;margin:6pt 0;page-break-inside:avoid;}
-table{width:100%;border-collapse:collapse;margin:6pt 0;}
-td,th{border:1pt solid #ddd;padding:4pt 7pt;font-size:9pt;}
-th{background:#f0ede4;}
+h2{font-size:12pt;color:#c9a84c;margin-top:14pt;margin-bottom:4pt;}
+h3{font-size:11pt;color:#1a1a2e;margin:0 0 2pt;}
+p{line-height:1.8;margin:4pt 0;}
+.block{border:1pt solid #e0dbd0;padding:8pt 10pt;margin:8pt 0;page-break-inside:avoid;background:#fffef9;}
 </style></head><body>
 <h1>🎓 ${title}</h1>
-<p style="text-align:center;color:#999;font-size:9pt;">查询：${query} · 匹配 ${matchCount} 所学校 · ${generatedAt}</p>`;
+<p style="text-align:center;color:#999;font-size:9pt;margin-bottom:10pt;">查询：${query} · 匹配 ${matchCount} 所学校 · ${generatedAt}</p>`;
 
   if(isQuery){
     if(report.summary) content+=`<h2>概述</h2><p>${report.summary}</p>`;
     content+=`<h2>学校列表（${(report.schools||[]).length} 所）</h2>`;
     (report.schools||[]).forEach((s,i)=>{
-      const idx=SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===s.name_en);
-      const sc=idx>=0?SCHOOLS[idx]:{};
-      content+=`<div class="block">
-<h3>${i+1}. ${s.name_cn||s.name_en}</h3>
-<p style="font-size:9pt;color:#888;">${s.name_en} · ${s.state||''}</p>
-<table><tr><th>年费</th><td>${sc['费用']||'—'}</td><th>GE评级</th><td>${sc['GE评级']||'—'}</td><th>FS排名</th><td>${sc['2026 FS排名']?'#'+sc['2026 FS排名']:'—'}</td></tr></table>
-<p><strong>项目介绍：</strong>${s.project_detail||''}</p>
-${(s.highlights||[]).length?`<p><strong>亮点：</strong>${s.highlights.join('；')}</p>`:''}
-${s.suitable_for?`<p style="color:#888;font-size:9pt;">适合：${s.suitable_for}</p>`:''}
+      const sc=getSchoolInfo(s.name_en);
+      content+=`<div class="block"><h3>${i+1}. ${s.name_cn||s.name_en}</h3>
+<p style="font-size:9pt;color:#888;margin:1pt 0 4pt;">${s.name_en}${s.state?' · '+s.state:''}</p>
+${infoTable(sc)}
+<p><b>项目介绍：</b>${s.project_detail||''}</p>
+${(s.highlights||[]).length?`<p><b>亮点：</b>${s.highlights.join('；')}</p>`:''}
+${s.suitable_for?`<p style="color:#888;font-size:9pt;">👤 适合：${s.suitable_for}</p>`:''}
 </div>`;
     });
     if(report.conclusion) content+=`<h2>总结建议</h2><p>${report.conclusion}</p>`;
@@ -3336,20 +3355,17 @@ ${s.suitable_for?`<p style="color:#888;font-size:9pt;">适合：${s.suitable_for
     if(report.strategy) content+=`<h2>择校思路</h2><p>${report.strategy}</p>`;
     content+=`<h2>推荐学校（${(report.schools||[]).length} 所）</h2>`;
     (report.schools||[]).forEach(s=>{
-      const idx=SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===s.name_en);
-      const sc=idx>=0?SCHOOLS[idx]:{};
-      content+=`<div class="block">
-<h3>${s.rank}. ${s.name_cn||s.name_en} · ${s.type||''}</h3>
-<p style="font-size:9pt;color:#888;">${s.name_en} · ${s.state||''}</p>
-<table><tr><th>年费</th><td>${sc['费用']||'—'}</td><th>GE评级</th><td>${sc['GE评级']||'—'}</td><th>FS排名</th><td>${sc['2026 FS排名']?'#'+sc['2026 FS排名']:'—'}</td></tr></table>
-<p><strong>推荐理由：</strong>${s.reason||''}</p>
-${(s.highlights||[]).length?`<p><strong>亮点：</strong>${s.highlights.join('；')}</p>`:''}
+      const sc=getSchoolInfo(s.name_en);
+      content+=`<div class="block"><h3>${s.rank}. ${s.name_cn||s.name_en} <span style="font-size:9pt;color:#27ae60;">${s.type||''}</span></h3>
+<p style="font-size:9pt;color:#888;margin:1pt 0 4pt;">${s.name_en}${s.state?' · '+s.state:''}</p>
+${infoTable(sc)}
+<p><b>推荐理由：</b>${s.reason||''}</p>
+${(s.highlights||[]).length?`<p><b>亮点：</b>${s.highlights.join('；')}</p>`:''}
 ${s.concerns?`<p style="color:#888;font-size:9pt;">⚠️ ${s.concerns}</p>`:''}
 </div>`;
     });
     if(report.advice) content+=`<h2>顾问建议</h2><p>${report.advice}</p>`;
   }
-
   content+=`<p style="color:#bbb;font-size:8pt;margin-top:16pt;border-top:1pt solid #ddd;padding-top:6pt;">本报告由智能美高择校系统 AI 顾问基于真实学校数据生成，仅供参考。</p></body></html>`;
 
   const blob=new Blob(['\ufeff'+content],{type:'application/msword;charset=utf-8'});
@@ -3357,6 +3373,44 @@ ${s.concerns?`<p style="color:#888;font-size:9pt;">⚠️ ${s.concerns}</p>`:''}
   a.href=URL.createObjectURL(blob);
   a.download=`${title}_${generatedAt.replace(/[/: ]/g,'-')}.doc`;
   a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),30000);
+}
+
+function downloadAIXlsx(){
+  const {report, mode, query, matchCount, generatedAt} = lastAIReport;
+  const isQuery = mode==='query';
+  const HEADERS = isQuery
+    ? ['序号','学校名称（英文）','学校名称（中文）','州','GE评级','类型','宗教','学生人数','国际生年级','年费（含食宿）','托福最低','课程体系','临近城市','学校亮点','项目详情','核心亮点','适合学生']
+    : ['序号','推荐类型','学校名称（英文）','学校名称（中文）','州','GE评级','类型','宗教','学生人数','国际生年级','年费（含食宿）','托福最低','课程体系','临近城市','学校亮点','推荐理由','核心亮点','注意事项'];
+  const clean = v=>(v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
+  const getInfo = n=>{const i=SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===n);return i>=0?SCHOOLS[i]:null;};
+  const T=(sc,f)=>sc?(sc[f]||'').toString().trim():'';
+  const rows=(report.schools||[]).map((s,i)=>{
+    const sc=getInfo(s.name_en);
+    // 年费：与页面一致，用 getCost 格式
+    const costRaw=T(sc,'费用预估（含学费+食宿）');
+    const cost=costRaw&&!isNaN(parseFloat(costRaw))?'$'+(parseFloat(costRaw)/10000).toFixed(1)+'万/年':(T(sc,'费用')||'');
+    const city=T(sc,'临近城市(Nearby City)').replace(/；\s*$/,'');
+    const curr=T(sc,'课程体系');
+    const hl=(sc?sc['亮点总结（Highlights）']||'':'').toString().replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim();
+    if(isQuery) return [i+1,clean(s.name_en),clean(s.name_cn||s.name_en),clean(s.state||T(sc,'州 State')),
+      T(sc,'GE评级'),T(sc,'类型 Type'),T(sc,'宗教 Religion'),T(sc,'全校学生数量 Student Body'),
+      T(sc,'国际生年级Grades open for International students'),cost,
+      T(sc,'TOEFL Mini. （以9年级为标准）'),curr,city,hl,
+      clean(s.project_detail||''),clean((s.highlights||[]).join('；')),clean(s.suitable_for||'')];
+    return [s.rank,clean(s.type||''),clean(s.name_en),clean(s.name_cn||s.name_en),clean(s.state||T(sc,'州 State')),
+      T(sc,'GE评级'),T(sc,'类型 Type'),T(sc,'宗教 Religion'),T(sc,'全校学生数量 Student Body'),
+      T(sc,'国际生年级Grades open for International students'),cost,
+      T(sc,'TOEFL Mini. （以9年级为标准）'),curr,city,hl,
+      clean(s.reason||''),clean((s.highlights||[]).join('；')),clean(s.concerns||'')];
+  });
+  const xlsx=buildXlsx(rows,HEADERS,new Set([13]));
+  const blob=new Blob([xlsx],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`${report.title||'AI择校报告'}_${generatedAt.replace(/[/: ]/g,'-')}.xlsx`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),30000);
 }
 </script>
 </body>
