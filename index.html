@@ -3066,12 +3066,39 @@ function extractByKeywords(s, keywords){
   return parts.join('\n\n');
 }
 
+// ── 学校名称模糊匹配（兼容 AI 返回名称与数据库名称的细微差异）──
+function findSchoolIndex(name_en){
+  if(!name_en) return -1;
+  const q = name_en.toLowerCase().replace(/[（）()\[\],.，。\s]+/g,'');
+  // 1. 精确匹配
+  let idx = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===name_en);
+  if(idx>=0) return idx;
+  // 2. 忽略括号/空格/标点后匹配
+  idx = SCHOOLS.findIndex(sc=>{
+    const n=(sc['学校名称(School Name）']||'').toLowerCase().replace(/[（）()\[\],.，。\s]+/g,'');
+    return n===q;
+  });
+  if(idx>=0) return idx;
+  // 3. 包含匹配（name_en 是数据库名的前缀或子串）
+  idx = SCHOOLS.findIndex(sc=>{
+    const n=(sc['学校名称(School Name）']||'').toLowerCase().replace(/[（）()\[\],.，。\s]+/g,'');
+    return n.startsWith(q) || q.startsWith(n);
+  });
+  if(idx>=0) return idx;
+  // 4. 取前3个单词匹配
+  const words = name_en.toLowerCase().split(/\s+/).slice(0,3).join(' ');
+  idx = SCHOOLS.findIndex(sc=>
+    (sc['学校名称(School Name）']||'').toLowerCase().includes(words)
+  );
+  return idx;
+}
+
 function renderReport(report, mode){
   let html='';
 
   // ── 固定信息栏：从 SCHOOLS 数据中提取固定显示字段 ──
   const getFixedInfo = (name_en) => {
-    const idx = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===name_en);
+    const idx = findSchoolIndex(name_en);
     if(idx<0) return {idx:-1, infoHtml:''};
     const sc = SCHOOLS[idx];
     const T = f => (sc[f]||'').toString().trim();
@@ -3277,9 +3304,15 @@ function downloadAIDocx(){
   const {report, mode, query, matchCount, generatedAt} = lastAIReport;
   const isQuery = mode==='query';
   const title = isQuery ? (report.title||'专项查询报告') : '择校推荐报告';
+  // 动态分析标签：从报告标题提取核心主题
+  const sectionLabel = (() => {
+    if(!isQuery) return '推荐理由与分析';
+    const t = (report.title||query||'').replace(/学校汇总报告|汇总报告|详细报告|专项查询报告|报告/g,'').trim();
+    return t ? t+'介绍' : '项目介绍';
+  })();
 
   const getSchoolInfo = name_en => {
-    const i = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===name_en);
+    const i = findSchoolIndex(name_en);
     return i>=0 ? SCHOOLS[i] : null;
   };
   const T = (sc,f) => sc ? (sc[f]||'').toString().trim() : '';
@@ -3344,6 +3377,7 @@ p{line-height:1.8;margin:4pt 0;}
       content+=`<div class="block"><h3>${i+1}. ${s.name_cn||s.name_en}</h3>
 <p style="font-size:9pt;color:#888;margin:1pt 0 4pt;">${s.name_en}${s.state?' · '+s.state:''}</p>
 ${infoTable(sc)}
+<p style="background:#f5f2ec;border-left:3pt solid #c9a84c;padding:3pt 8pt;margin:6pt 0 3pt;font-size:9pt;font-weight:600;color:#1a1a2e;">📋 ${sectionLabel}</p>
 <p><b>项目介绍：</b>${s.project_detail||''}</p>
 ${(s.highlights||[]).length?`<p><b>亮点：</b>${s.highlights.join('；')}</p>`:''}
 ${s.suitable_for?`<p style="color:#888;font-size:9pt;">👤 适合：${s.suitable_for}</p>`:''}
@@ -3359,6 +3393,7 @@ ${s.suitable_for?`<p style="color:#888;font-size:9pt;">👤 适合：${s.suitabl
       content+=`<div class="block"><h3>${s.rank}. ${s.name_cn||s.name_en} <span style="font-size:9pt;color:#27ae60;">${s.type||''}</span></h3>
 <p style="font-size:9pt;color:#888;margin:1pt 0 4pt;">${s.name_en}${s.state?' · '+s.state:''}</p>
 ${infoTable(sc)}
+<p style="background:#f5f2ec;border-left:3pt solid #c9a84c;padding:3pt 8pt;margin:6pt 0 3pt;font-size:9pt;font-weight:600;color:#1a1a2e;">📋 ${sectionLabel}</p>
 <p><b>推荐理由：</b>${s.reason||''}</p>
 ${(s.highlights||[]).length?`<p><b>亮点：</b>${s.highlights.join('；')}</p>`:''}
 ${s.concerns?`<p style="color:#888;font-size:9pt;">⚠️ ${s.concerns}</p>`:''}
@@ -3383,7 +3418,7 @@ function downloadAIXlsx(){
     ? ['序号','学校名称（英文）','学校名称（中文）','州','GE评级','类型','宗教','学生人数','国际生年级','年费（含食宿）','托福最低','课程体系','临近城市','学校亮点','项目详情','核心亮点','适合学生']
     : ['序号','推荐类型','学校名称（英文）','学校名称（中文）','州','GE评级','类型','宗教','学生人数','国际生年级','年费（含食宿）','托福最低','课程体系','临近城市','学校亮点','推荐理由','核心亮点','注意事项'];
   const clean = v=>(v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
-  const getInfo = n=>{const i=SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===n);return i>=0?SCHOOLS[i]:null;};
+  const getInfo = n=>{const i=findSchoolIndex(n);return i>=0?SCHOOLS[i]:null;};
   const T=(sc,f)=>sc?(sc[f]||'').toString().trim():'';
   const rows=(report.schools||[]).map((s,i)=>{
     const sc=getInfo(s.name_en);
