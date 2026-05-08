@@ -2444,8 +2444,8 @@ function generateFilterReport(schools){
   if(filters.feat.length) filterDesc.push('特色：'+filters.feat.join('、'));
   if(filters.travelKm) filterDesc.push('车程：约3小时以内');
   const hasTravelCol=Object.keys(travelResults).length>0;
-  const HEADERS=['GE评级','州 State','学校名称（英文）','学校名称（中文）','亮点总结','托福最低','Duolingo','SSAT','面试方式','申请表格','申请费','申请截止日期','录取结果发布时间','类型','宗教','开设年级','全校学生数量','建校年份','是否开设PG','最高毕业年龄','国际生开放年级','住校学生比例','国际学生比例','中国学生数量/比例','师生比例','学制','12年级申请','SAT均分','AP/IB/CC数量','ESL','年费预估','费用说明','住宿安排','走读Homestay安排','是否直飞','官网',...(hasTravelCol?['车程距离','驾车时间']:[])];
-  const FIELD_MAP=['GE评级','州 State','学校名称(School Name）','学校名称(中文）','亮点总结（Highlights）','TOEFL Mini. （以9年级为标准）','Duolingo','SSAT','Interview','App. Form','App. Fee','APP. DDL','申请材料齐全后录取结果发布时间','类型 Type','宗教 Religion','开设年级 Grades','全校学生数量 Student Body','建校时间 Found Year','是否开设PG year','最高毕业年龄(Age limit)','国际生年级Grades open for International students','住校学生数量 Boarding %','国际学生数量 International student %','中国学生数量Chinese Student %','师生比例 Teacher : Student','学制','12年级申请者(12th grade applicant)','SAT均分','#AP/#IB/#CC','ESL语言支持','费用预估（含学费+食宿）','费用说明（包括学费、住宿、三餐）Tuition and Fees','住宿安排 Dorm','走读Homestay 安排 (如果学校允许走读）','是否可以直飞','参考官网 Website'];
+  const HEADERS=['GE评级','州 State','学校名称（英文）','学校名称（中文）','亮点总结','托福最低','Duolingo','SSAT','面试方式','申请表格','申请费','申请截止日期','录取结果发布时间','类型','宗教','开设年级','全校学生数量','建校年份','是否开设PG','最高毕业年龄','国际生开放年级','住校学生比例','国际学生比例','中国学生数量/比例','师生比例','学制','12年级申请','SAT均分','AP/IB/CC数量','ESL','年费预估','费用说明','住宿安排','走读Homestay安排','是否直飞','官网','FS排名','NICHE排名',...(hasTravelCol?['车程距离','驾车时间']:[])];
+  const FIELD_MAP=['GE评级','州 State','学校名称(School Name）','学校名称(中文）','亮点总结（Highlights）','TOEFL Mini. （以9年级为标准）','Duolingo','SSAT','Interview','App. Form','App. Fee','APP. DDL','申请材料齐全后录取结果发布时间','类型 Type','宗教 Religion','开设年级 Grades','全校学生数量 Student Body','建校时间 Found Year','是否开设PG year','最高毕业年龄(Age limit)','国际生年级Grades open for International students','住校学生数量 Boarding %','国际学生数量 International student %','中国学生数量Chinese Student %','师生比例 Teacher : Student','学制','12年级申请者(12th grade applicant)','SAT均分','#AP/#IB/#CC','ESL语言支持','费用预估（含学费+食宿）','费用说明（包括学费、住宿、三餐）Tuition and Fees','住宿安排 Dorm','走读Homestay 安排 (如果学校允许走读）','是否可以直飞','参考官网 Website','2026 FS排名','2026 NICHE排名'];
   const clean=v=>(v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
   // 保留换行的字段（亮点总结 idx=4, 费用说明 idx=31）
   const WRAP_FIELDS = new Set(['亮点总结（Highlights）','费用说明（包括学费、住宿、三餐）Tuition and Fees']);
@@ -2458,6 +2458,7 @@ function generateFilterReport(schools){
       }
       let v=clean(s[field]||'');
       if(field==='费用预估（含学费+食宿）'&&v){const n=parseFloat(v);if(!isNaN(n))v='$'+(n/10000).toFixed(1)+'万';}
+      if((field==='2026 FS排名'||field==='2026 NICHE排名')&&v) v='#'+v;
       return v;
     });
     if(hasTravelCol){const tr=travelResults[clean(s['学校名称(School Name）'])];vals.push(tr?(tr.distText||tr.dist.toFixed(1)+'km'):'');vals.push(tr?tr.time:'');}
