@@ -3308,8 +3308,13 @@ function downloadAIDocx(){
   // 动态分析标签：从报告标题提取核心主题
   const sectionLabel = (() => {
     if(!isQuery) return '推荐理由与分析';
-    const t = (report.title||query||'').replace(/学校汇总报告|汇总报告|详细报告|专项查询报告|报告/g,'').trim();
-    return t ? t+'介绍' : '项目介绍';
+    // 去掉：数量（如"16所"）、"美国高中"、"学校汇总报告"等通用词
+    const t = (report.title||query||'')
+      .replace(/\d+\s*所/g,'')           // 去掉"16所"
+      .replace(/美国高中/g,'')              // 去掉"美国高中"
+      .replace(/学校汇总报告|汇总报告|详细报告|专项查询报告|报告|介绍/g,'')
+      .trim();
+    return t || '项目详情';
   })();
 
   const getSchoolInfo = name_en => {
@@ -3378,7 +3383,7 @@ p{line-height:1.8;margin:4pt 0;}
       content+=`<div class="block"><h3>${i+1}. ${s.name_cn||s.name_en}</h3>
 <p style="font-size:9pt;color:#888;margin:1pt 0 4pt;">${s.name_en}${s.state?' · '+s.state:''}</p>
 ${infoTable(sc)}
-<p style="background:#f5f2ec;border-left:3pt solid #c9a84c;padding:3pt 8pt;margin:6pt 0 3pt;font-size:9pt;font-weight:600;color:#1a1a2e;">📋 ${sectionLabel}</p>
+<div style="background:#faf8f4;border-left:3pt solid #c9a84c;padding:5pt 8pt;margin:8pt 0 4pt;"><b style="color:#888;font-size:9pt;">${sectionLabel}：</b></div>
 <p><b>项目介绍：</b>${s.project_detail||''}</p>
 ${(s.highlights||[]).length?`<p><b>亮点：</b>${s.highlights.join('；')}</p>`:''}
 ${s.suitable_for?`<p style="color:#888;font-size:9pt;">👤 适合：${s.suitable_for}</p>`:''}
@@ -3394,7 +3399,7 @@ ${s.suitable_for?`<p style="color:#888;font-size:9pt;">👤 适合：${s.suitabl
       content+=`<div class="block"><h3>${s.rank}. ${s.name_cn||s.name_en} <span style="font-size:9pt;color:#27ae60;">${s.type||''}</span></h3>
 <p style="font-size:9pt;color:#888;margin:1pt 0 4pt;">${s.name_en}${s.state?' · '+s.state:''}</p>
 ${infoTable(sc)}
-<p style="background:#f5f2ec;border-left:3pt solid #c9a84c;padding:3pt 8pt;margin:6pt 0 3pt;font-size:9pt;font-weight:600;color:#1a1a2e;">📋 ${sectionLabel}</p>
+<div style="background:#faf8f4;border-left:3pt solid #c9a84c;padding:5pt 8pt;margin:8pt 0 4pt;"><b style="color:#888;font-size:9pt;">${sectionLabel}：</b></div>
 <p><b>推荐理由：</b>${s.reason||''}</p>
 ${(s.highlights||[]).length?`<p><b>亮点：</b>${s.highlights.join('；')}</p>`:''}
 ${s.concerns?`<p style="color:#888;font-size:9pt;">⚠️ ${s.concerns}</p>`:''}
