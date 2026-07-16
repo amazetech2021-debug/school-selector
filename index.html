@@ -3092,28 +3092,64 @@ function extractByKeywords(s, keywords){
 // ── 学校名称模糊匹配（兼容 AI 返回名称与数据库名称的细微差异）──
 function findSchoolIndex(name_en){
   if(!name_en) return -1;
-  const q = name_en.toLowerCase().replace(/[（）()\[\],.，。\s]+/g,'');
+
+  // 标准化：去括号/标点/空格/常见前缀"the "/去重音符/常见简写扩展
+  const normalize = s => {
+    if(!s) return '';
+    return s.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')   // 去重音（Léman → Leman）
+      .replace(/^the\s+/,'')                              // 去开头 "the "
+      .replace(/\bpreparatory\b/g,'prep')                 // preparatory ↔ prep
+      .replace(/\bpre\s+school\b/g,'prep school')         // Pre School ↔ Prep School
+      .replace(/\bpreschool\b/g,'prep school')
+      .replace(/\bschool\b|\bacademy\b|\bcollege\b/g,'')  // 去通用后缀（做分词比较用）
+      .replace(/[（）()\[\],.，。'"、·・&]+/g,' ')
+      .replace(/\s+/g,' ').trim();
+  };
+  const q = normalize(name_en);
+  const qNoSpace = q.replace(/\s+/g,'');
+
   // 1. 精确匹配
   let idx = SCHOOLS.findIndex(sc=>sc['学校名称(School Name）']===name_en);
   if(idx>=0) return idx;
-  // 2. 忽略括号/空格/标点后匹配
+
+  // 2. 标准化后完全相等
+  idx = SCHOOLS.findIndex(sc=>normalize(sc['学校名称(School Name）'])===q);
+  if(idx>=0) return idx;
+
+  // 3. 标准化+去空格后相等
+  idx = SCHOOLS.findIndex(sc=>normalize(sc['学校名称(School Name）']).replace(/\s+/g,'')===qNoSpace);
+  if(idx>=0) return idx;
+
+  // 4. 前缀/包含匹配
   idx = SCHOOLS.findIndex(sc=>{
-    const n=(sc['学校名称(School Name）']||'').toLowerCase().replace(/[（）()\[\],.，。\s]+/g,'');
-    return n===q;
+    const n = normalize(sc['学校名称(School Name）']).replace(/\s+/g,'');
+    return n && qNoSpace && (n.startsWith(qNoSpace) || qNoSpace.startsWith(n));
   });
   if(idx>=0) return idx;
-  // 3. 包含匹配（name_en 是数据库名的前缀或子串）
+
+  // 5. 关键词包含（数据库名字包含查询的关键词，或反向）
   idx = SCHOOLS.findIndex(sc=>{
-    const n=(sc['学校名称(School Name）']||'').toLowerCase().replace(/[（）()\[\],.，。\s]+/g,'');
-    return n.startsWith(q) || q.startsWith(n);
+    const n = normalize(sc['学校名称(School Name）']).replace(/\s+/g,'');
+    return n && qNoSpace && (n.includes(qNoSpace) || qNoSpace.includes(n));
   });
   if(idx>=0) return idx;
-  // 4. 取前3个单词匹配
-  const words = name_en.toLowerCase().split(/\s+/).slice(0,3).join(' ');
-  idx = SCHOOLS.findIndex(sc=>
-    (sc['学校名称(School Name）']||'').toLowerCase().includes(words)
-  );
-  return idx;
+
+  // 6. 共同单词评分 —— 最强兜底
+  const qWords = q.split(/\s+/).filter(w=>w.length>=3);
+  if(qWords.length===0) return -1;
+  let bestIdx = -1, bestScore = 0;
+  SCHOOLS.forEach((sc,i)=>{
+    const nWords = normalize(sc['学校名称(School Name）']).split(/\s+/).filter(w=>w.length>=3);
+    if(nWords.length===0) return;
+    const common = qWords.filter(w=>nWords.includes(w)).length;
+    // 至少要有一半的关键词匹配才认为是同一所学校
+    if(common>=Math.max(1, Math.min(qWords.length, nWords.length)/2) && common>bestScore){
+      bestScore = common;
+      bestIdx = i;
+    }
+  });
+  return bestIdx;
 }
 
 function renderReport(report, mode){
