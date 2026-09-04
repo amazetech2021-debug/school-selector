@@ -2356,56 +2356,68 @@ function openFilterReport(){
 }
 
 function buildXlsx(allRows, headers, wrapCols) {
-  // wrapCols: Set of 0-based column indices that need wrap_text
-  wrapCols = wrapCols || new Set();
+  // wrapCols 参数保留兼容旧调用，但新版全部单元格统一自动换行，不再区分列
   const enc = new TextEncoder();
   const xlEsc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const colLetter = n => { let s=''; while(n){ s=String.fromCharCode(64+(n-1)%26+1)+s; n=Math.floor((n-1)/26); } return s; };
 
-  // 换行内容用 <t xml:space="preserve"> + <r><t> 逐行拆分
-  const buildCell = (col, row, val) => {
+  // 所有单元格统一：s="1" 表头（红字），s="2" 数据行（黑字），均含边框+换行+顶端左对齐
+  const buildCell = (col, row, val, styleIdx) => {
     const ref = colLetter(col+1) + row;
-    const s = String(val||'');
-    if(wrapCols.has(col) && s.includes('\n')){
-      // 自动换行单元格：样式 s="1"，用多个 <r><t> 表示分行
-      const lines = s.split('\n');
-      const runs = lines.map((l,i) =>
-        '<r>' + (i>0 ? '<rPh/>' : '') +
-        '<t xml:space="preserve">' + xlEsc(l) + (i<lines.length-1 ? '&#10;' : '') + '</t></r>'
-      ).join('');
-      // 实际上 xlsx 换行最简单方式：直接在 inlineStr 的 t 里用 &#10;，加 s="1" 开启 wrapText
-      const joined = xlEsc(s.replace(/\n/g, '\n')).replace(/\n/g,'&#10;');
-      return '<c r="'+ref+'" t="inlineStr" s="1"><is><t xml:space="preserve">'+joined+'</t></is></c>';
-    }
-    return '<c r="'+ref+'" t="inlineStr"><is><t>'+xlEsc(s)+'</t></is></c>';
+    const s = String(val==null?'':val);
+    const joined = xlEsc(s).replace(/\n/g,'&#10;');
+    return '<c r="'+ref+'" t="inlineStr" s="'+styleIdx+'"><is><t xml:space="preserve">'+joined+'</t></is></c>';
   };
 
-  const buildRow = (ri, vals) =>
-    '<row r="'+ri+'">'+vals.map((v,ci)=>buildCell(ci, ri, v)).join('')+'</row>';
+  const ROW_HEIGHT = 20;
+  const buildRow = (ri, vals, styleIdx) =>
+    '<row r="'+ri+'" ht="'+ROW_HEIGHT+'" customHeight="1">'+vals.map((v,ci)=>buildCell(ci, ri, v, styleIdx)).join('')+'</row>';
 
-  let rowsXml = buildRow(1, headers);
-  allRows.forEach((row,i) => rowsXml += buildRow(i+2, row));
+  let rowsXml = buildRow(1, headers, 1); // 表头：s=1（红字）
+  allRows.forEach((row,i) => rowsXml += buildRow(i+2, row, 2)); // 数据：s=2（黑字）
 
-  // styles.xml: xf[0]=default, xf[1]=wrapText
+  const lastRow = allRows.length + 1;
+  const lastCol = colLetter(headers.length);
+
+  // 自动识别"学校名称（英文）"列，设置列宽为30（1-based列号）
+  const nameColIdx1based = headers.findIndex(h => h === '学校名称（英文）') + 1;
+  const colsXml = nameColIdx1based > 0
+    ? '<cols><col min="'+nameColIdx1based+'" max="'+nameColIdx1based+'" width="30" customWidth="1"/></cols>'
+    : '';
+
+  // 冻结窗格：固定在 D2（前3列 + 表头行冻结）
+  const freezeXml = '<pane xSplit="3" ySplit="1" topLeftCell="D2" activePane="bottomRight" state="frozen"/>' +
+    '<selection pane="topRight" activeCell="D1" sqref="D1"/>' +
+    '<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>' +
+    '<selection pane="bottomRight" activeCell="D2" sqref="D2"/>';
+
+  // styles.xml：华文中宋 10号，表头红字，数据黑字，均含四边细边框 + 自动换行 + 顶端左对齐
   const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-    '<fonts><font><sz val="9"/><name val="Arial"/></font></fonts>' +
+    '<fonts count="2">' +
+      '<font><sz val="10"/><name val="\u534e\u6587\u4e2d\u5b8b"/></font>' +               // fontId=0 数据：黑字
+      '<font><sz val="10"/><color rgb="FFFF0000"/><name val="\u534e\u6587\u4e2d\u5b8b"/></font>' + // fontId=1 表头：红字
+    '</fonts>' +
     '<fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
-    '<borders><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<borders count="2">' +
+      '<border><left/><right/><top/><bottom/><diagonal/></border>' + // borderId=0 无边框
+      '<border><left style="thin"><color indexed="64"/></left><right style="thin"><color indexed="64"/></right><top style="thin"><color indexed="64"/></top><bottom style="thin"><color indexed="64"/></bottom><diagonal/></border>' + // borderId=1 四边细边框
+    '</borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs>' +
-      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +  // s=0 default
-      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1" vertical="top"/></xf>' + // s=1 wrap
+    '<cellXfs count="3">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' + // s=0 默认（备用）
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf>' + // s=1 表头
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf>' + // s=2 数据
     '</cellXfs>' +
     '</styleSheet>';
 
   const files=[
     ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
     ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
-    ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="\u62e9\u6821\u7b5b\u9009\u7ed3\u679c" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+    ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="sheet" sheetId="1" r:id="rId1"/></sheets></workbook>'],
     ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
     ['xl/styles.xml', stylesXml],
-    ['xl/worksheets/sheet1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>'+rowsXml+'</sheetData></worksheet>'],
+    ['xl/worksheets/sheet1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0">'+freezeXml+'</sheetView></sheetViews><sheetFormatPr defaultRowHeight="'+ROW_HEIGHT+'"/>'+colsXml+'<sheetData>'+rowsXml+'</sheetData><autoFilter ref="A1:'+lastCol+lastRow+'"/></worksheet>'],
   ];
   const crcT=new Uint32Array(256);
   for(let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=c&1?(0xEDB88320^(c>>>1)):(c>>>1);crcT[i]=c;}
