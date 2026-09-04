@@ -2685,8 +2685,8 @@ ${schoolNameList}
 - scope：有target_schools则为specific，否则为all`;
 
     setProgress('🔍 解析指令中…');
-    const parseResp = await callAI(providerCfg, parsePrompt, 800,
-      '你是指令解析器。只输出纯JSON，不加任何markdown格式（不加```json```），不加说明文字，不加代码块标记。');
+    const parseResp = await callAI(providerCfg, parsePrompt, 3000,
+      '你是指令解析器。只输出纯JSON，不加任何markdown格式（不加```json```），不加说明文字，不加代码块标记。', 'none');
     const parseText = stripMarkdown(parseResp._text || '');
     if(!parseText.trim()){
       throw new Error('API 返回内容为空。可能原因：\n1. API Key 余额不足（请登录 platform.deepseek.com 查看）\n2. 网络问题\n\n完整响应：'+JSON.stringify(parseResp).slice(0,300));
@@ -2884,11 +2884,11 @@ ${schoolDataContext}
     }
 
     setProgress(`📝 AI 正在生成「${searchTopic}」报告…`);
-    const reportResp = await callAI(providerCfg, reportPrompt, 8000,
-      '你是专业的美国高中教育顾问。只输出纯JSON，绝对不加```json```代码块标记，不加任何说明文字，不编造数据，直接以{开头。');
+    const reportResp = await callAI(providerCfg, reportPrompt, 12000,
+      '你是专业的美国高中教育顾问。只输出纯JSON，绝对不加```json```代码块标记，不加任何说明文字，不编造数据，直接以{开头。', 'low');
     const reportText = stripMarkdown(reportResp._text || '');
     const reportMatch = reportText.match(/\{[\s\S]*\}/);
-    if(!reportMatch) throw new Error('报告生成格式异常，请重试');
+    if(!reportMatch) throw new Error('报告生成格式异常，请重试。'+(reportResp._usedReasoningFallback?'（提示：本次从思考过程回退提取，如果内容不完整可重新生成）':''));
     let report;
     try {
       report = JSON.parse(reportMatch[0]);
@@ -2977,12 +2977,22 @@ function stripMarkdown(text){
   return text.trim();
 }
 
-async function callAI(cfg, prompt, maxTokens, systemPrompt){
+async function callAI(cfg, prompt, maxTokens, systemPrompt, reasoningEffort){
   let resp, data;
   const TIMEOUT_MS = 300000; // 300秒，V4-Pro大模型生成慢
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
+    const body = {
+      model: cfg.model,
+      max_tokens: maxTokens,
+      messages: [
+        {role:'system', content: systemPrompt},
+        {role:'user',   content: prompt}
+      ]
+    };
+    // V4-Pro 是推理模型，简单任务（指令解析）关闭思考可避免 tokens 被推理过程耗尽
+    if(reasoningEffort) body.reasoning_effort = reasoningEffort;
     resp = await fetch(cfg.url, {
       method: 'POST',
       signal: controller.signal,
@@ -2990,19 +3000,16 @@ async function callAI(cfg, prompt, maxTokens, systemPrompt){
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + cfg.key
       },
-      body: JSON.stringify({
-        model: cfg.model,
-        max_tokens: maxTokens,
-        messages: [
-          {role:'system', content: systemPrompt},
-          {role:'user',   content: prompt}
-        ]
-      })
+      body: JSON.stringify(body)
     });
     if(!resp.ok){ const t=await resp.text(); throw new Error('API错误 '+resp.status+': '+t.substring(0,300)); }
     data = await resp.json();
     if(data.error) throw new Error(data.error.message||'API 错误');
-    data._text = data.choices?.[0]?.message?.content||'';
+    const msg = data.choices?.[0]?.message||{};
+    // V4-Pro 是推理模型：思考过程在 reasoning_content，最终答案在 content。
+    // 若 content 为空（常见于 max_tokens 不足、思考未走完），回退取 reasoning_content 中的 JSON 片段。
+    data._text = msg.content || msg.reasoning_content || '';
+    data._usedReasoningFallback = !msg.content && !!msg.reasoning_content;
   } catch(e) {
     if(e.name==='AbortError') throw new Error('请求超时（超过5分钟），请稍后重试或减少查询范围');
     throw e;
@@ -3032,7 +3039,7 @@ async function testCurrentAPI(){
     const resp = await fetch(cfg.url, {
       method:'POST', signal:ctrl.signal,
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
-      body:JSON.stringify({model:cfg.model, max_tokens:20, messages:[{role:'user',content:'回复"ok"'}]})
+      body:JSON.stringify({model:cfg.model, max_tokens:100, reasoning_effort:'none', messages:[{role:'user',content:'回复"ok"'}]})
     });
     clearTimeout(tmr);
     const ms = Date.now()-t0;
@@ -3043,7 +3050,8 @@ async function testCurrentAPI(){
       return;
     }
     const d = await resp.json();
-    const reply = d.choices?.[0]?.message?.content||'(无回复)';
+    const msg = d.choices?.[0]?.message||{};
+    const reply = msg.content || msg.reasoning_content || '(无回复，可能是余额不足)';
     resEl.style.background='rgba(45,122,106,.2)'; resEl.style.color='#7dd4c4';
     resEl.textContent='✅ 连接成功！模型: '+cfg.model+' · 响应时间: '+ms+'ms · 回复: '+reply;
   } catch(e) {
