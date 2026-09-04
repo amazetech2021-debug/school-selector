@@ -2688,8 +2688,13 @@ ${schoolNameList}
     const parseResp = await callAI(providerCfg, parsePrompt, 800,
       '你是指令解析器。只输出纯JSON，不加任何markdown格式（不加```json```），不加说明文字，不加代码块标记。');
     const parseText = stripMarkdown(parseResp._text || '');
+    if(!parseText.trim()){
+      throw new Error('API 返回内容为空。可能原因：\n1. API Key 余额不足（请登录 platform.deepseek.com 查看）\n2. 网络问题\n\n完整响应：'+JSON.stringify(parseResp).slice(0,300));
+    }
     const parseMatch = parseText.match(/\{[\s\S]*\}/);
-    if(!parseMatch) throw new Error('指令解析失败，请重试');
+    if(!parseMatch){
+      throw new Error('指令解析失败：返回内容不是有效 JSON。\n实际返回（前300字）：\n'+parseText.slice(0,300));
+    }
     let parsed;
     try {
       parsed = JSON.parse(parseMatch[0]);
@@ -2700,7 +2705,9 @@ ${schoolNameList}
         .replace(/,\s*([}\]])/g,'$1')                        // 去除尾随逗号
         .replace(/([{,]\s*)(\w+)\s*:/g,'$1"$2":');          // 给无引号key加引号
       try { parsed = JSON.parse(cleaned); }
-      catch(e2) { throw new Error('指令解析失败（JSON格式异常），请重试'); }
+      catch(e2) {
+        throw new Error('指令解析失败（JSON格式异常）。\n实际返回：\n'+parseMatch[0].slice(0,400));
+      }
     }
 
     const targetSchools   = parsed.target_schools || [];
