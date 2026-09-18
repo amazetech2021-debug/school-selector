@@ -1658,6 +1658,7 @@ function buildDetail(s){
   parts.push(sec('📝','申请要求',`<div class="dtg">
     ${dItem('语言要求综合',s['语言要求'])}
     ${dItem('托福最低（9年级）',s['TOEFL Mini. （以9年级为标准）'],'dtv-b')}
+    ${dItem('新版托福要求',s['新版托福要求'],'dtv-b')}
     ${dItem('托福均分',s['TOEFL Ave.（以9年级为标准）'])}
     ${dItem('Duolingo',s['Duolingo'])}
     ${dItem('SSAT',s['SSAT'])}
@@ -1765,6 +1766,13 @@ function buildDetail(s){
   if(H(s['推文更新']))contBody+=`<div class="dtg" style="margin-top:8px;">${dLink('推文更新链接',s['推文更新'])}</div>`;
   if(H(s['线上学分']))contBody+=subLbl('线上学分')+dTxt(s['线上学分']);
   if(contBody)parts.push(sec('📰','推文与内容资料',contBody));
+
+  // 14b. 近期活动（仅有活动时显示）
+  if(H(s['近期活动'])){
+    let actBody=`<div class="dtg">${dItem('活动类型',s['近期活动'])}${dItem('活动城市',s['活动城市'])}</div>`;
+    if(H(s['活动详情'])) actBody+=subLbl('活动详情')+dTxt(s['活动详情'],'dtxt-info');
+    parts.push(sec('🎪','近期活动',actBody));
+  }
 
   // 15. 硬件设施
   if(H(s['硬件设施 Facilities']))
