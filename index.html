@@ -969,7 +969,7 @@ a.dtv-link:hover{text-decoration:underline;}
   </div>
   <div class="ai-body">
     <div class="ai-left">
-      <div class="ai-form-title">输入任意查询需求，AI 将检索全部学校真实数据（推文、体育、艺术、亮点等），生成基于真实内容的专业报告</div>
+      <div class="ai-form-title">输入任意查询需求，AI 将检索全部学校真实数据（推文、体育、艺术、亮点、内部培训笔记等），生成基于真实内容的专业报告</div>
 
       
             <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
@@ -2800,7 +2800,7 @@ ${schoolNameList}
       '学校开设体育项目罗列 Athletic/Sports',
       '学校开设艺术项目罗列（艺术课程）Arts',
       '学校开设特色项目罗列 Signature programs',
-      '体育','艺术','课程','亮点总结（Highlights）'
+      '体育','艺术','课程','亮点总结（Highlights）','培训笔记'
     ];
 
     let schoolDataContext = '';
@@ -3114,7 +3114,7 @@ function searchByKeywords(keywords){
     '学校开设体育项目罗列 Athletic/Sports',
     '学校开设艺术项目罗列（艺术课程）Arts',
     '学校开设特色项目罗列 Signature programs',
-    '体育','艺术','课程','亮点总结（Highlights）'
+    '体育','艺术','课程','亮点总结（Highlights）','培训笔记'
   ];
   return SCHOOLS.filter(s=>{
     const text = SEARCH_FIELDS.map(f=>s[f]||'').join(' ').toLowerCase();
@@ -3128,7 +3128,8 @@ function extractByKeywords(s, keywords){
     {key:'学校开设艺术项目罗列（艺术课程）Arts',label:'艺术项目'},
     {key:'学校开设特色项目罗列 Signature programs',label:'特色项目'},
     {key:'体育',label:'体育标签'},{key:'艺术',label:'艺术标签'},
-    {key:'亮点总结（Highlights）',label:'学校亮点'}
+    {key:'亮点总结（Highlights）',label:'学校亮点'},
+    {key:'培训笔记',label:'内部培训笔记'}
   ];
   const parts=[];
   SEARCH_FIELDS.forEach(({key,label})=>{
