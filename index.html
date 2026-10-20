@@ -2896,6 +2896,7 @@ ${schoolDataContext}
 
 注意：
 - project_detail 必须完全来自提供的原始数据，不得添加未提及的内容
+- 语气：直接陈述事实，禁止出现“资料称”“资料显示”“根据资料”“资料未提供”“原始数据”“数据中”等字样；资料没有涉及的内容直接省略，不要说明“未提供”
 - 输出全部提供的学校，不得遗漏任何一所，不限制学校数量
 - 每条 project_detail 控制在200字以内，无学校数量限制，全部输出`;
 
@@ -2929,13 +2930,14 @@ ${schoolDataContext}
   "advice": "综合建议（80字）"
 }
 
-输出全部提供的学校，不得遗漏，不限制数量，type可用：强烈推荐/推荐/备选`;
+输出全部提供的学校，不得遗漏，不限制数量，type可用：强烈推荐/推荐/备选
+- 语气：直接陈述事实，禁止出现“资料称”“资料显示”“根据资料”“资料未提供”“原始数据”“数据中”等字样；资料没有涉及的内容直接省略，不要说明“未提供”`;
     }
 
     setProgress(`📝 AI 正在生成「${searchTopic}」报告…`);
     const reportResp = await callAI(providerCfg, reportPrompt, 12000,
       '你是专业的美国高中教育顾问。只输出纯JSON，绝对不加```json```代码块标记，不加任何说明文字，不编造数据，直接以{开头。', 'low');
-    const reportText = stripMarkdown(reportResp._text || '');
+    const reportText = cleanRefPhrases(stripMarkdown(reportResp._text || ''));
     const reportMatch = reportText.match(/\{[\s\S]*\}/);
     if(!reportMatch) throw new Error('报告生成格式异常，请重试。'+(reportResp._usedReasoningFallback?'（提示：本次从思考过程回退提取，如果内容不完整可重新生成）':''));
     let report;
@@ -3016,6 +3018,9 @@ function showAIError(text){
   el.textContent = text; el.style.display='block';
 }
 // ── 剥离 AI 返回的 markdown 代码块 ──
+function cleanRefPhrases(t){
+  return String(t||'').replace(/(?:根据|据)?(?:学校)?(?:提供的)?(?:原始)?资料(?:显示|称|表明|中提到|中提及|提到|指出)[，,：:]?/g,'');
+}
 function stripMarkdown(text){
   // 去除 ```json...``` 或 ```...``` 包裹（含多行）
   text = text.replace(/^```[a-zA-Z]*\s*/,'').replace(/\s*```\s*$/,'');
