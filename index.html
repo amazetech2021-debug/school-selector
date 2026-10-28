@@ -1576,6 +1576,7 @@ function reset(){
   document.getElementById('tweet-search-mob').value='';
   document.getElementById('travel-input').value='';
   clearTravel();
+  selected.clear(); saveSelected();   // 重置时同时清空已勾选
   updateFilterBadge();
   render();
 }
