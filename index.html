@@ -136,6 +136,18 @@ main{flex:1;padding:16px;min-width:0;overflow-x:hidden;}
 @keyframes fi{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
 
 .ch{padding:14px 15px 10px;background:linear-gradient(135deg,var(--ink) 0%,var(--ink2) 100%);position:relative;overflow:hidden;}
+.card-sel{position:absolute;top:10px;right:10px;z-index:3;width:26px;height:26px;border-radius:50%;
+  border:1.5px solid rgba(255,255,255,.45);background:rgba(0,0,0,.25);color:transparent;font-size:.82rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;}
+.card-sel:hover{border-color:var(--gold);background:rgba(201,168,76,.25);}
+.card-sel.on{background:var(--gold);border-color:var(--gold);color:var(--ink);}
+.card.picked{border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,168,76,.45);}
+.sel-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 12px;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:rgba(201,168,76,.06);font-size:.74rem;color:var(--ink2);}
+.sel-bar b{color:var(--gold);font-size:.9rem;}
+.sel-bar button{padding:5px 11px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--ink);font-size:.72rem;cursor:pointer;font-family:inherit;}
+.sel-bar button:hover{border-color:var(--gold);}
+.sel-bar .sel-exp{background:var(--ink);color:var(--gl);border-color:var(--ink);}
+.sel-bar .sel-exp:disabled{opacity:.4;cursor:not-allowed;}
 .ch::after{content:'';position:absolute;right:-10px;top:-10px;width:55px;height:55px;border:1px solid rgba(201,168,76,.1);border-radius:50%;}
 .cn{font-family:'Noto Serif SC',serif;font-size:.96rem;color:var(--gl);font-weight:600;line-height:1.3;}
 .ce{font-size:.65rem;color:rgba(255,255,255,.38);margin-top:2px;line-height:1.3;}
@@ -885,6 +897,12 @@ a.dtv-link:hover{text-decoration:underline;}
         <button class="sbtn" id="sort-dist-btn" onclick="setSort('dist',this)" style="display:none">🚗距离↑</button>
       </div>
     </div>
+    <div class="sel-bar" id="sel-bar">
+      <span>☑ 勾选导出：已勾选 <b id="sel-count">0</b> 所（点卡片右上角圆圈勾选）</span>
+      <button onclick="selectAllShown()">全选当前结果</button>
+      <button onclick="clearSelected()">清除勾选</button>
+      <button class="sel-exp" id="sel-exp-btn" onclick="exportSelected()" disabled>📥 导出已勾选</button>
+    </div>
     <div class="grid" id="grid"></div>
   </main>
 </div>
@@ -1267,6 +1285,37 @@ function getRatings(s){
   return h?`<div class="rts">${h}</div>`:'';
 }
 
+// ─── 勾选导出 ───
+const SEL_KEY='ge_selected_schools';
+const selected=new Set();
+try{ JSON.parse(localStorage.getItem(SEL_KEY)||'[]').forEach(n=>selected.add(n)); }catch(e){}
+function saveSelected(){ try{ localStorage.setItem(SEL_KEY,JSON.stringify([...selected])); }catch(e){} }
+function updateSelBar(){
+  const n=selected.size;
+  const c=document.getElementById('sel-count'); if(c) c.textContent=n;
+  const b=document.getElementById('sel-exp-btn'); if(b){ b.disabled=n===0; b.textContent=n?`📥 导出已勾选 (${n}所)`:'📥 导出已勾选'; }
+}
+function toggleSel(ev,idx){
+  ev.stopPropagation();
+  const name=SCHOOLS[idx]['学校名称(School Name）'];
+  const on=!selected.has(name);
+  if(on) selected.add(name); else selected.delete(name);
+  ev.currentTarget.classList.toggle('on',on);
+  const card=ev.currentTarget.closest('.card'); if(card) card.classList.toggle('picked',on);
+  saveSelected(); updateSelBar();
+}
+function selectAllShown(){
+  SCHOOLS.filter(matchFilters).forEach(s=>selected.add(s['学校名称(School Name）']));
+  saveSelected(); render();
+}
+function clearSelected(){
+  selected.clear(); saveSelected(); render();
+}
+function exportSelected(){
+  const list=sorted(SCHOOLS.filter(s=>selected.has(s['学校名称(School Name）'])));
+  if(!list.length) return;
+  generateFilterReport(list,'择校勾选结果');
+}
 function renderCard(s,i){
   const cn=T(s,'学校名称(中文）')||T(s,'学校名称(School Name）');
   const en=T(s,'学校名称(School Name）');
@@ -1279,8 +1328,10 @@ function renderCard(s,i){
   tags+=sports.map(a=>`<span class="tag ts">⚽${a.trim()}</span>`).join('');
   tags+=courses.map(a=>`<span class="tag tc">📚${a.trim()}</span>`).join('');
   const idx=SCHOOLS.indexOf(s);
-  return `<div class="card" style="animation-delay:${Math.min(i,.3)*0.025}s" onclick="openDetail(${idx})">
+  const picked=selected.has(en);
+  return `<div class="card${picked?' picked':''}" style="animation-delay:${Math.min(i,.3)*0.025}s" onclick="openDetail(${idx})">
     <div class="ch">
+      <div class="card-sel${picked?' on':''}" onclick="toggleSel(event,${idx})" title="勾选 / 取消勾选">✓</div>
       <div class="cn">${cn}</div>
       <div class="ce">${en}${state?' · '+state:''}</div>
       <div class="cbg">${getBadges(s)}</div>
@@ -2378,9 +2429,10 @@ function render(){
   document.getElementById('rnum').textContent=list.length;
   document.getElementById('fn').textContent=list.length;
   const g=document.getElementById('grid');
-  if(!list.length){g.innerHTML=`<div class="empty"><div class="emo">🔍</div><h3>没有找到匹配学校，请放宽条件</h3></div>`;updateFilterReportBtn();return;}
+  if(!list.length){g.innerHTML=`<div class="empty"><div class="emo">🔍</div><h3>没有找到匹配学校，请放宽条件</h3></div>`;updateFilterReportBtn();updateSelBar();return;}
   g.innerHTML=list.map((s,i)=>renderCardWithDist(s,i)).join('');
   updateFilterReportBtn();
+  updateSelBar();
 }
 
 // Enter key support for travel input
@@ -2502,7 +2554,8 @@ function buildXlsx(allRows, headers, wrapCols) {
   return out;
 }
 
-function generateFilterReport(schools){
+function generateFilterReport(schools,fileLabel){
+  fileLabel=fileLabel||'择校筛选结果';
   const now=new Date().toLocaleString('zh-CN');
   const filterDesc=[];
   if(searchQ) filterDesc.push('关键词：'+searchQ);
@@ -2548,7 +2601,7 @@ function generateFilterReport(schools){
   const blob=new Blob([xlsx],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`择校筛选结果_${schools.length}所_${now.replace(/[/: ]/g,'-')}.xlsx`;
+  a.download=`${fileLabel}_${schools.length}所_${now.replace(/[/: ]/g,'-')}.xlsx`;
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),30000);
 }
