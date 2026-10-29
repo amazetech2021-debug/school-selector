@@ -218,6 +218,14 @@ main{flex:1;padding:16px;min-width:0;overflow-x:hidden;}
 .dp-pager-btn.disabled{opacity:.2;cursor:not-allowed;pointer-events:none;}
 .dp-pager-pos{font-size:.65rem;color:rgba(255,255,255,.3);white-space:nowrap;}
 .dp-hi{padding:14px 16px 12px;}
+.dp-cnrow{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;}
+.dp-find{display:flex;align-items:center;gap:2px;background:rgba(255,255,255,.08);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:2px 6px;flex:0 1 270px;min-width:170px;}
+.dp-find input{background:transparent;border:none;outline:none;color:#fff;font-size:16px;flex:1;min-width:0;font-family:inherit;padding:5px 2px;}
+.dp-find input::placeholder{color:rgba(255,255,255,.4);}
+.dp-find .fc{font-size:.68rem;color:rgba(255,255,255,.55);white-space:nowrap;padding:0 3px;}
+.dp-find button{background:none;border:none;color:var(--gl);cursor:pointer;padding:4px 6px;font-size:.78rem;min-height:30px;}
+mark.dfind{background:#f6e27a;color:#1a1a2e;border-radius:2px;padding:0 1px;}
+mark.dfind.cur{background:#ff9f43;outline:2px solid #ff9f43;}
 .dp-cn{font-family:'Noto Serif SC',serif;font-size:1.3rem;color:var(--gl);font-weight:700;line-height:1.3;}
 .dp-en{font-size:.74rem;color:rgba(255,255,255,.38);margin-top:3px;line-height:1.4;}
 .dp-bb{display:flex;gap:4px;margin-top:9px;flex-wrap:wrap;}
@@ -1074,7 +1082,18 @@ a.dtv-link:hover{text-decoration:underline;}
       </div>
     </div>
     <div class="dp-hi">
-      <div class="dp-cn" id="dp-cn"></div>
+      <div class="dp-cnrow">
+        <div class="dp-cn" id="dp-cn"></div>
+        <div class="dp-find">
+          <input id="dp-find-input" type="search" placeholder="🔍 在本页查找…" autocomplete="off"
+            oninput="clearTimeout(dfTimer);dfTimer=setTimeout(dfRun,150)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();dfStep(event.shiftKey?-1:1);}">
+          <span class="fc" id="dp-find-count"></span>
+          <button type="button" onclick="dfStep(-1)" title="上一个">▲</button>
+          <button type="button" onclick="dfStep(1)" title="下一个">▼</button>
+          <button type="button" onclick="dfClearInput()" title="清除">✕</button>
+        </div>
+      </div>
       <div class="dp-en" id="dp-en"></div>
       <div class="dp-bb" id="dp-bb"></div>
     </div>
@@ -1867,7 +1886,63 @@ function buildDetail(s){
 
 let currentDetailIdx = -1;
 
+// ─── 详情页：页面内查找 ───
+let dfMarks=[], dfCur=-1, dfTimer=null;
+function dfUnwrap(){
+  document.querySelectorAll('#dp-body mark.dfind').forEach(m=>{
+    const p=m.parentNode; if(!p) return;
+    p.replaceChild(document.createTextNode(m.textContent),m); p.normalize();
+  });
+  dfMarks=[]; dfCur=-1;
+}
+function dfRun(){
+  dfUnwrap();
+  const q=(document.getElementById('dp-find-input').value||'').trim();
+  const cnt=document.getElementById('dp-find-count');
+  if(!q){ cnt.textContent=''; return; }
+  const re=new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+  const walker=document.createTreeWalker(document.getElementById('dp-body'),NodeFilter.SHOW_TEXT,{acceptNode:n=>{
+    if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+    const t=n.parentNode.nodeName; return (t==='SCRIPT'||t==='STYLE')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;
+  }});
+  const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(n=>{
+    const text=n.nodeValue; re.lastIndex=0; let m, last=0, frag=null;
+    while((m=re.exec(text))){
+      if(m[0]===''){ re.lastIndex++; continue; }
+      if(!frag) frag=document.createDocumentFragment();
+      if(m.index>last) frag.appendChild(document.createTextNode(text.slice(last,m.index)));
+      const mk=document.createElement('mark'); mk.className='dfind'; mk.textContent=m[0];
+      frag.appendChild(mk); dfMarks.push(mk); last=m.index+m[0].length;
+    }
+    if(frag){ if(last<text.length) frag.appendChild(document.createTextNode(text.slice(last))); n.parentNode.replaceChild(frag,n); }
+  });
+  dfCur=dfMarks.length?0:-1; dfShow();
+}
+function dfShow(){
+  const cnt=document.getElementById('dp-find-count');
+  dfMarks.forEach(m=>m.classList.remove('cur'));
+  if(dfCur<0){ cnt.textContent='无结果'; return; }
+  const m=dfMarks[dfCur]; m.classList.add('cur');
+  cnt.textContent=(dfCur+1)+'/'+dfMarks.length;
+  m.scrollIntoView({block:'center',behavior:'smooth'});
+}
+function dfStep(d){
+  if(!dfMarks.length){ dfRun(); return; }
+  dfCur=(dfCur+d+dfMarks.length)%dfMarks.length; dfShow();
+}
+function dfClearInput(){
+  const i=document.getElementById('dp-find-input'); if(i){ i.value=''; }
+  dfRun();
+}
+function dfReset(){
+  const i=document.getElementById('dp-find-input'); if(i) i.value='';
+  const c=document.getElementById('dp-find-count'); if(c) c.textContent='';
+  dfMarks=[]; dfCur=-1;
+}
+
 function openDetail(idx){
+  dfReset();
   currentDetailIdx = idx;
   const s=SCHOOLS[idx];
   const cn=T(s,'学校名称(中文）')||T(s,'学校名称(School Name）');
@@ -1944,6 +2019,7 @@ function scrollToSec(id,tab){
 }
 
 function closeDetail(){
+  dfReset();
   document.getElementById('dp').classList.remove('open');
   document.body.style.overflow='';
 }
