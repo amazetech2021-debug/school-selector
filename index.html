@@ -218,9 +218,9 @@ main{flex:1;padding:16px;min-width:0;overflow-x:hidden;}
 .dp-pager-btn.disabled{opacity:.2;cursor:not-allowed;pointer-events:none;}
 .dp-pager-pos{font-size:.65rem;color:rgba(255,255,255,.3);white-space:nowrap;}
 .dp-hi{padding:14px 16px 12px;}
-.dp-pick{padding:5px 12px;min-height:32px;border-radius:16px;border:1.5px solid rgba(201,168,76,.6);background:rgba(0,0,0,.2);color:var(--gl);font-size:.78rem;cursor:pointer;font-family:'Noto Sans SC',sans-serif;white-space:nowrap;transition:all .15s;}
-.dp-pick:hover{background:rgba(201,168,76,.2);}
-.dp-pick.on{background:var(--gold);border-color:var(--gold);color:var(--ink);font-weight:600;}
+.dp-pick{width:36px;height:36px;border-radius:50%;flex:0 0 36px;border:2px solid rgba(201,168,76,.7);background:rgba(0,0,0,.25);color:transparent;font-size:1.05rem;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;user-select:none;}
+.dp-pick:hover{background:rgba(201,168,76,.25);}
+.dp-pick.on{background:var(--gold);border-color:var(--gold);color:var(--ink);}
 .dp-cnrow{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;}
 .dp-find{display:flex;align-items:center;gap:2px;background:rgba(255,255,255,.08);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:2px 6px;flex:0 1 270px;min-width:170px;}
 .dp-find input{background:transparent;border:none;outline:none;color:#fff;font-size:16px;flex:1;min-width:0;font-family:inherit;padding:5px 2px;}
@@ -1087,7 +1087,6 @@ a.dtv-link:hover{text-decoration:underline;}
     <div class="dp-hi">
       <div class="dp-cnrow">
         <div class="dp-cn" id="dp-cn"></div>
-        <button type="button" class="dp-pick" id="dp-pick" onclick="togglePickDetail()">☐ 勾选导出</button>
         <div class="dp-find">
           <input id="dp-find-input" type="search" placeholder="🔍 在本页查找…" autocomplete="off"
             oninput="clearTimeout(dfTimer);dfTimer=setTimeout(dfRun,150)"
@@ -1097,6 +1096,7 @@ a.dtv-link:hover{text-decoration:underline;}
           <button type="button" onclick="dfStep(1)" title="下一个">▼</button>
           <button type="button" onclick="dfClearInput()" title="清除">✕</button>
         </div>
+        <div class="dp-pick" id="dp-pick" role="button" aria-label="勾选导出" title="勾选 / 取消勾选导出" onclick="togglePickDetail()">✓</div>
       </div>
       <div class="dp-en" id="dp-en"></div>
       <div class="dp-bb" id="dp-bb"></div>
@@ -1336,7 +1336,7 @@ function dpPickRefresh(){
   const b=document.getElementById('dp-pick'); if(!b) return;
   const on=selected.has(SCHOOLS[currentDetailIdx]['学校名称(School Name）']);
   b.classList.toggle('on',on);
-  b.textContent=on?'☑ 已勾选':'☐ 勾选导出';
+  b.title=on?'已勾选，点击取消':'勾选 / 取消勾选导出';
 }
 function togglePickDetail(){
   const idx=currentDetailIdx, name=SCHOOLS[idx]['学校名称(School Name）'];
