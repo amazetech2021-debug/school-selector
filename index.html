@@ -222,7 +222,8 @@ main{flex:1;padding:16px;min-width:0;overflow-x:hidden;}
 .dp-pick:hover{background:rgba(201,168,76,.25);}
 .dp-pick.on{background:var(--gold);border-color:var(--gold);color:var(--ink);}
 .dp-cnrow{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;}
-.dp-find{display:flex;align-items:center;gap:2px;background:rgba(255,255,255,.08);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:2px 6px;flex:0 1 270px;min-width:170px;}
+.dp-tools{display:flex;align-items:center;gap:10px;flex:0 0 100%;max-width:100%;}
+.dp-find{display:flex;align-items:center;gap:2px;background:rgba(255,255,255,.08);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:2px 6px;flex:1 1 auto;max-width:300px;min-width:0;}
 .dp-find input{background:transparent;border:none;outline:none;color:#fff;font-size:16px;flex:1;min-width:0;font-family:inherit;padding:5px 2px;}
 .dp-find input::placeholder{color:rgba(255,255,255,.4);}
 .dp-find .fc{font-size:.68rem;color:rgba(255,255,255,.55);white-space:nowrap;padding:0 3px;}
@@ -1087,6 +1088,7 @@ a.dtv-link:hover{text-decoration:underline;}
     <div class="dp-hi">
       <div class="dp-cnrow">
         <div class="dp-cn" id="dp-cn"></div>
+        <div class="dp-tools">
         <div class="dp-find">
           <input id="dp-find-input" type="search" placeholder="🔍 在本页查找…" autocomplete="off"
             oninput="clearTimeout(dfTimer);dfTimer=setTimeout(dfRun,150)"
@@ -1097,6 +1099,7 @@ a.dtv-link:hover{text-decoration:underline;}
           <button type="button" onclick="dfClearInput()" title="清除">✕</button>
         </div>
         <div class="dp-pick" id="dp-pick" role="button" aria-label="勾选导出" title="勾选 / 取消勾选导出" onclick="togglePickDetail()">✓</div>
+        </div>
       </div>
       <div class="dp-en" id="dp-en"></div>
       <div class="dp-bb" id="dp-bb"></div>
