@@ -218,6 +218,9 @@ main{flex:1;padding:16px;min-width:0;overflow-x:hidden;}
 .dp-pager-btn.disabled{opacity:.2;cursor:not-allowed;pointer-events:none;}
 .dp-pager-pos{font-size:.65rem;color:rgba(255,255,255,.3);white-space:nowrap;}
 .dp-hi{padding:14px 16px 12px;}
+.dp-pick{padding:5px 12px;min-height:32px;border-radius:16px;border:1.5px solid rgba(201,168,76,.6);background:rgba(0,0,0,.2);color:var(--gl);font-size:.78rem;cursor:pointer;font-family:'Noto Sans SC',sans-serif;white-space:nowrap;transition:all .15s;}
+.dp-pick:hover{background:rgba(201,168,76,.2);}
+.dp-pick.on{background:var(--gold);border-color:var(--gold);color:var(--ink);font-weight:600;}
 .dp-cnrow{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;}
 .dp-find{display:flex;align-items:center;gap:2px;background:rgba(255,255,255,.08);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:2px 6px;flex:0 1 270px;min-width:170px;}
 .dp-find input{background:transparent;border:none;outline:none;color:#fff;font-size:16px;flex:1;min-width:0;font-family:inherit;padding:5px 2px;}
@@ -1084,6 +1087,7 @@ a.dtv-link:hover{text-decoration:underline;}
     <div class="dp-hi">
       <div class="dp-cnrow">
         <div class="dp-cn" id="dp-cn"></div>
+        <button type="button" class="dp-pick" id="dp-pick" onclick="togglePickDetail()">☐ 勾选导出</button>
         <div class="dp-find">
           <input id="dp-find-input" type="search" placeholder="🔍 在本页查找…" autocomplete="off"
             oninput="clearTimeout(dfTimer);dfTimer=setTimeout(dfRun,150)"
@@ -1328,6 +1332,23 @@ function toggleSel(ev,idx){
   const card=ev.currentTarget.closest('.card'); if(card) card.classList.toggle('picked',on);
   saveSelected(); updateSelBar();
 }
+function dpPickRefresh(){
+  const b=document.getElementById('dp-pick'); if(!b) return;
+  const on=selected.has(SCHOOLS[currentDetailIdx]['学校名称(School Name）']);
+  b.classList.toggle('on',on);
+  b.textContent=on?'☑ 已勾选':'☐ 勾选导出';
+}
+function togglePickDetail(){
+  const idx=currentDetailIdx, name=SCHOOLS[idx]['学校名称(School Name）'];
+  const on=!selected.has(name);
+  if(on) selected.add(name); else selected.delete(name);
+  saveSelected(); updateSelBar(); dpPickRefresh();
+  // 同步列表里对应卡片
+  document.querySelectorAll('.card-sel[data-idx="'+idx+'"]').forEach(el=>{
+    el.classList.toggle('on',on);
+    const c=el.closest('.card'); if(c) c.classList.toggle('picked',on);
+  });
+}
 function selectAllShown(){
   SCHOOLS.filter(matchFilters).forEach(s=>selected.add(s['学校名称(School Name）']));
   saveSelected(); render();
@@ -1355,7 +1376,7 @@ function renderCard(s,i){
   const picked=selected.has(en);
   return `<div class="card${picked?' picked':''}" style="animation-delay:${Math.min(i,.3)*0.025}s" onclick="openDetail(${idx})">
     <div class="ch">
-      <div class="card-sel${picked?' on':''}" onclick="toggleSel(event,${idx})" title="勾选 / 取消勾选">✓</div>
+      <div class="card-sel${picked?' on':''}" data-idx="${idx}" onclick="toggleSel(event,${idx})" title="勾选 / 取消勾选">✓</div>
       <div class="cn">${cn}</div>
       <div class="ce">${en}${state?' · '+state:''}</div>
       <div class="cbg">${getBadges(s)}</div>
@@ -1952,6 +1973,7 @@ function openDetail(idx){
   document.getElementById('dp-bb').innerHTML=getBadges(s);
   document.getElementById('dp-bc').textContent=cn;
   document.getElementById('dp-body').innerHTML=buildDetail(s);
+  dpPickRefresh();
 
   // Update pager
   const filteredList = sorted(SCHOOLS.filter(matchFilters));
