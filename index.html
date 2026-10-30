@@ -825,6 +825,23 @@ a.dtv-link:hover{text-decoration:underline;}
   /* Ensure sidebar shows */
   aside.desktop-sidebar{display:block;}
 }
+#ef-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:none;align-items:center;justify-content:center;padding:12px;}
+#ef-modal.open{display:flex;}
+.ef-box{background:#fff;border-radius:12px;width:min(760px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;color:#222;}
+.ef-hd{padding:14px 16px;font-weight:600;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px;}
+.ef-sub{font-weight:400;font-size:.78rem;color:#777;}.ef-sub b{color:var(--gold);}
+.ef-x{margin-left:auto;border:none;background:none;font-size:1.1rem;cursor:pointer;min-width:36px;min-height:36px;}
+.ef-tools{display:flex;gap:6px;padding:10px 16px;flex-wrap:wrap;border-bottom:1px solid #eee;}
+.ef-tools input{flex:1 1 200px;font-size:16px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;}
+.ef-tools button{padding:6px 12px;min-height:34px;border:1px solid #ddd;background:#fafafa;border-radius:6px;cursor:pointer;font-size:.78rem;}
+.ef-body{overflow-y:auto;padding:6px 16px 12px;flex:1;}
+.ef-sec{font-size:.78rem;font-weight:600;color:var(--gold);margin:12px 0 6px;}
+.ef-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 10px;}
+.ef-it{display:flex;align-items:flex-start;gap:6px;font-size:.8rem;padding:5px 2px;cursor:pointer;line-height:1.35;}
+.ef-it input{margin-top:3px;width:16px;height:16px;flex:0 0 auto;}
+.ef-empty{font-size:.78rem;color:#aaa;padding:6px;}
+.ef-ft{padding:10px 16px;border-top:1px solid #eee;display:flex;align-items:center;gap:10px;font-size:.72rem;color:#888;}
+.ef-ok{margin-left:auto;padding:8px 22px;min-height:38px;border:none;border-radius:6px;background:var(--gold);color:var(--ink);font-weight:600;cursor:pointer;font-size:.85rem;}
 </style>
 </head>
 <body>
@@ -910,6 +927,7 @@ a.dtv-link:hover{text-decoration:underline;}
         <button onclick="selectAllShown()">全选当前结果</button>
         <button onclick="clearSelected()">清除勾选</button>
         <button class="sel-exp" id="sel-exp-btn" onclick="exportSelected()" disabled>📥 导出已勾选</button>
+        <button id="ef-open-btn" onclick="openExportFields()" title="选择导出 Excel 时包含哪些字段">⚙ 导出字段</button>
       </div>
       <div class="sbar">
         <span class="sl">排序</span>
@@ -996,6 +1014,22 @@ a.dtv-link:hover{text-decoration:underline;}
 </div>
 
 <!-- ═══ AI ADVISOR PANEL ═══ -->
+<div id="ef-modal" onclick="if(event.target===this)closeExportFields()">
+  <div class="ef-box">
+    <div class="ef-hd">⚙ 选择导出字段 <span class="ef-sub">已选 <b id="ef-count">0</b> 项</span><button class="ef-x" onclick="closeExportFields()">✕</button></div>
+    <div class="ef-tools">
+      <input id="ef-search" type="search" placeholder="🔍 搜索字段，如：假期、推文、佣金…" oninput="efRender()">
+      <button onclick="efReset()">恢复默认</button>
+      <button onclick="efAll(true)">全选</button>
+      <button onclick="efAll(false)">全不选</button>
+    </div>
+    <div class="ef-body">
+      <div class="ef-sec">默认字段（取消勾选可去掉）</div><div class="ef-grid" id="ef-def"></div>
+      <div class="ef-sec">其他字段（勾选后追加到表格末尾）</div><div class="ef-grid" id="ef-ext"></div>
+    </div>
+    <div class="ef-ft"><span>导出筛选结果 / 导出已勾选 都按这里的选择生成</span><button class="ef-ok" onclick="efSave()">保存</button></div>
+  </div>
+</div>
 <div id="ai-panel">
   <div class="ai-hdr">
     <div class="ai-nav">
@@ -2551,6 +2585,7 @@ document.getElementById('travel-input').addEventListener('keydown',e=>{
 document.getElementById('tn').textContent=SCHOOLS.length;
 initMultiSelects();
 render();
+setTimeout(()=>{ try{ if(loadExportFields()){ const b=document.getElementById('ef-open-btn'); if(b) b.textContent='⚙ 导出字段（自定义）'; } }catch(e){} },0);
 
 // ══════════════════════════════════════
 //  筛选结果 Word 报告
@@ -2662,6 +2697,50 @@ function buildXlsx(allRows, headers, wrapCols) {
   return out;
 }
 
+const EXPORT_BASE_HEADERS=['GE评级','州 State','学校名称（英文）','学校名称（中文）','临近城市','亮点总结','托福最低','新版托福要求','Duolingo','SSAT','面试方式','申请表格','申请费','申请截止日期','录取结果发布时间','类型','宗教','开设年级','全校学生数量','建校年份','是否开设PG','最高毕业年龄','国际生开放年级','住校学生比例','国际学生比例','中国学生数量/比例','师生比例','学制','12年级申请','SAT均分','AP/IB/CC数量','ESL','年费预估','费用说明','住宿安排','走读Homestay安排','是否直飞','官网','FS排名','NICHE排名','近期活动','活动城市','活动详情'];
+const EXPORT_FIELD_MAP=['GE评级','州 State','学校名称(School Name）','学校名称(中文）','临近城市(Nearby City)','亮点总结（Highlights）','TOEFL Mini. （以9年级为标准）','新版托福要求','Duolingo','SSAT','Interview','App. Form','App. Fee','APP. DDL','申请材料齐全后录取结果发布时间','类型 Type','宗教 Religion','开设年级 Grades','全校学生数量 Student Body','建校时间 Found Year','是否开设PG year','最高毕业年龄(Age limit)','国际生年级Grades open for International students','住校学生数量 Boarding %','国际学生数量 International student %','中国学生数量Chinese Student %','师生比例 Teacher : Student','学制','12年级申请者(12th grade applicant)','SAT均分','#AP/#IB/#CC','ESL语言支持','费用预估（含学费+食宿）','费用说明（包括学费、住宿、三餐）Tuition and Fees','住宿安排 Dorm','走读Homestay 安排 (如果学校允许走读）','是否可以直飞','参考官网 Website','2027 FS排名','2026 NICHE排名','近期活动','活动城市','活动详情'];
+const EXPORT_LS='ge_export_fields';
+function loadExportFields(){
+  try{ const a=JSON.parse(localStorage.getItem(EXPORT_LS)||'null'); if(Array.isArray(a)) return new Set(a); }catch(e){}
+  return null; // null = 默认
+}
+function exportLabel(k){ return k.replace(/\s*[（(].*$/,'').replace(/[：:]$/,'').trim()||k; }
+let efSel=new Set();
+function openExportFields(){
+  const cur=loadExportFields();
+  efSel=new Set(cur||EXPORT_FIELD_MAP);
+  document.getElementById('ef-search').value='';
+  efRender();
+  document.getElementById('ef-modal').classList.add('open');
+}
+function closeExportFields(){ document.getElementById('ef-modal').classList.remove('open'); }
+function efRender(){
+  const q=(document.getElementById('ef-search').value||'').trim().toLowerCase();
+  const all=Object.keys(SCHOOLS[0]||{}).filter(k=>k!=='data_id');
+  const item=(k,label)=>{
+    if(q && !(label+' '+k).toLowerCase().includes(q)) return '';
+    return `<label class="ef-it"><input type="checkbox" ${efSel.has(k)?'checked':''} onchange="efToggle(this.dataset.k,this.checked)" data-k="${k.replace(/"/g,'&quot;')}"><span>${label}</span></label>`;
+  };
+  const def=EXPORT_FIELD_MAP.map((k,i)=>item(k,EXPORT_BASE_HEADERS[i])).join('');
+  const ext=all.filter(k=>!EXPORT_FIELD_MAP.includes(k)).map(k=>item(k,exportLabel(k))).join('');
+  document.getElementById('ef-def').innerHTML=def||'<div class="ef-empty">无匹配</div>';
+  document.getElementById('ef-ext').innerHTML=ext||'<div class="ef-empty">无匹配</div>';
+  efCount();
+}
+function efToggle(k,on){ if(on) efSel.add(k); else efSel.delete(k); efCount(); }
+function efCount(){ document.getElementById('ef-count').textContent=efSel.size; }
+function efReset(){ efSel=new Set(EXPORT_FIELD_MAP); efRender(); }
+function efAll(on){
+  const all=Object.keys(SCHOOLS[0]||{}).filter(k=>k!=='data_id');
+  efSel=on?new Set(all):new Set(); efRender();
+}
+function efSave(){
+  if(!efSel.size){ alert('请至少选择一个字段'); return; }
+  const isDefault=efSel.size===EXPORT_FIELD_MAP.length&&EXPORT_FIELD_MAP.every(k=>efSel.has(k));
+  try{ if(isDefault) localStorage.removeItem(EXPORT_LS); else localStorage.setItem(EXPORT_LS,JSON.stringify([...efSel])); }catch(e){}
+  closeExportFields();
+  const b=document.getElementById('ef-open-btn'); if(b) b.textContent='⚙ 导出字段'+(isDefault?'':'（自定义）');
+}
 function generateFilterReport(schools,fileLabel){
   fileLabel=fileLabel||'择校筛选结果';
   const now=new Date().toLocaleString('zh-CN');
@@ -2685,15 +2764,22 @@ function generateFilterReport(schools,fileLabel){
   if(filters.feat.length) filterDesc.push('特色：'+filters.feat.join('、'));
   if(filters.travelKm) filterDesc.push('车程：约3小时以内');
   const hasTravelCol=Object.keys(travelResults).length>0;
-  const HEADERS=['GE评级','州 State','学校名称（英文）','学校名称（中文）','临近城市','亮点总结','托福最低','新版托福要求','Duolingo','SSAT','面试方式','申请表格','申请费','申请截止日期','录取结果发布时间','类型','宗教','开设年级','全校学生数量','建校年份','是否开设PG','最高毕业年龄','国际生开放年级','住校学生比例','国际学生比例','中国学生数量/比例','师生比例','学制','12年级申请','SAT均分','AP/IB/CC数量','ESL','年费预估','费用说明','住宿安排','走读Homestay安排','是否直飞','官网','FS排名','NICHE排名','近期活动','活动城市','活动详情',...(hasTravelCol?['车程距离','驾车时间']:[])];
-  const FIELD_MAP=['GE评级','州 State','学校名称(School Name）','学校名称(中文）','临近城市(Nearby City)','亮点总结（Highlights）','TOEFL Mini. （以9年级为标准）','新版托福要求','Duolingo','SSAT','Interview','App. Form','App. Fee','APP. DDL','申请材料齐全后录取结果发布时间','类型 Type','宗教 Religion','开设年级 Grades','全校学生数量 Student Body','建校时间 Found Year','是否开设PG year','最高毕业年龄(Age limit)','国际生年级Grades open for International students','住校学生数量 Boarding %','国际学生数量 International student %','中国学生数量Chinese Student %','师生比例 Teacher : Student','学制','12年级申请者(12th grade applicant)','SAT均分','#AP/#IB/#CC','ESL语言支持','费用预估（含学费+食宿）','费用说明（包括学费、住宿、三餐）Tuition and Fees','住宿安排 Dorm','走读Homestay 安排 (如果学校允许走读）','是否可以直飞','参考官网 Website','2027 FS排名','2026 NICHE排名','近期活动','活动城市','活动详情'];
+  const HEADERS=[...EXPORT_BASE_HEADERS,...(hasTravelCol?['车程距离','驾车时间']:[])];
+  const FIELD_MAP=EXPORT_FIELD_MAP;
   const clean=v=>(v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
   // 保留换行的字段（亮点总结 idx=4, 费用说明 idx=31）
   const WRAP_FIELDS = new Set(['亮点总结（Highlights）','费用说明（包括学费、住宿、三餐）Tuition and Fees','活动详情']);
   const WRAP_COLS = new Set([4, 31]); // 对应 FIELD_MAP 中的列索引
   const cleanWrap=v=>(v||'').toString().replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim();
+  // 用户选择的导出字段（默认字段可取消，其他字段可追加）
+  const exSel=loadExportFields();
+  const baseCols=FIELD_MAP.map((f,i)=>({h:HEADERS[i],f,extra:false})).filter(c=>!exSel||exSel.has(c.f));
+  const extraCols=exSel?Object.keys(SCHOOLS[0]||{}).filter(k=>!FIELD_MAP.includes(k)&&exSel.has(k)).map(k=>({h:exportLabel(k),f:k,extra:true})):[];
+  const cols=baseCols.concat(extraCols);
+  if(!cols.length){ alert('请至少选择一个导出字段'); return; }
   const rows=schools.map(s=>{
-    const vals=FIELD_MAP.map((field,fi)=>{
+    const vals=cols.map(({f:field,extra})=>{
+      if(extra) return cleanWrap(s[field]||'').slice(0,32000);
       if(WRAP_FIELDS.has(field)){
         return cleanWrap(s[field]||''); // 保留换行
       }
@@ -2705,7 +2791,8 @@ function generateFilterReport(schools,fileLabel){
     if(hasTravelCol){const tr=travelResults[clean(s['学校名称(School Name）'])];vals.push(tr?(tr.distText||tr.dist.toFixed(1)+'km'):'');vals.push(tr?tr.time:'');}
     return vals;
   });
-  const xlsx=buildXlsx(rows,HEADERS,WRAP_COLS);
+  const outHeaders=cols.map(c=>c.h).concat(hasTravelCol?['车程距离','驾车时间']:[]);
+  const xlsx=buildXlsx(rows,outHeaders,WRAP_COLS);
   const blob=new Blob([xlsx],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
