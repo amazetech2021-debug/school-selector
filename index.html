@@ -2894,14 +2894,18 @@ ${schoolNameList}
   "search_topic": "核心查询主题（2-6个字，如：马术项目、滑雪课程、音乐项目、申请要求）",
   "search_keywords": ["关键词1", "关键词2", "关键词3"],
   "output_requirement": "用户希望输出什么（如：整理项目详情、比较学校、列出课程安排等）",
-  "scope": "specific（指定学校）或 all（全库搜索）"
+  "scope": "specific（指定学校）或 all（全库搜索）",
+  "must_have": [["同义词组1：中英文变体，如游泳→\"游泳\",\"swim\""],["同义词组2"]],
+  "official_keywords": ["用于在学校官网中定位该主题的英文关键词，如 swim, aquatic, athletics"]
 }
 
 规则：
 - target_schools：如果用户提到具体学校名，从列表中精确匹配英文名；没有指定则返回空数组
 - search_topic：提炼最核心的查询主题，去掉"学校""项目""信息"等泛词
 - search_keywords：用于全文检索的关键词，包含中英文变体（如马术→["马术","horseback","equestrian"]）
-- scope：有target_schools则为specific，否则为all`;
+- scope：有target_schools则为specific，否则为all
+- must_have：仅当用户提出了【硬性要求】（如“有游泳项目”“要马术”“有IB”“女校”这类必须满足的具体项目/特色）时填写；每个要求是一组同义词（中英文），学校必须命中每一组才算满足。只是笼统描述学生情况、没有明确必须项时返回空数组[]
+- official_keywords：2-5个英文关键词，用于到学校官网找到相关页面；无明确主题时返回空数组`;
 
     setProgress('🔍 解析指令中…');
     const parseResp = await callAI(providerCfg, parsePrompt, 3000,
@@ -2935,6 +2939,10 @@ ${schoolNameList}
     const outputReq       = parsed.output_requirement || '';
     const isSpecific      = parsed.scope === 'specific' && targetSchools.length > 0;
     const finalMode       = parsed.intent === 'recommend' ? 'recommend' : mode;
+    const mustHave        = (Array.isArray(parsed.must_have)?parsed.must_have:[])
+                              .map(g=>(Array.isArray(g)?g:[g]).map(x=>String(x||'').trim()).filter(Boolean))
+                              .filter(g=>g.length);
+    const officialKw      = (Array.isArray(parsed.official_keywords)?parsed.official_keywords:[]).map(x=>String(x).trim()).filter(Boolean);
 
     // ══ Step 1: 精准检索学校 ══
     let matchedSchools = [];
@@ -2962,6 +2970,11 @@ ${schoolNameList}
       matchedSchools = searchByKeywords(searchKeywords);
     }
 
+    // 择校推荐：有硬性要求 → 精确筛选（每个要求都必须命中）；无硬性要求 → 全库参与匹配
+    if(finalMode === 'recommend' && !isSpecific){
+      matchedSchools = mustHave.length ? SCHOOLS.filter(s=>schoolMeetsMust(s, mustHave)) : SCHOOLS.slice();
+      if(mustHave.length) setProgress(`🎯 按硬性要求精确筛选：${mustHave.map(g=>g[0]).join(' + ')} → ${matchedSchools.length} 所`);
+    }
     setProgress(`✅ 找到 ${matchedSchools.length} 所学校，整理真实数据…`);
 
     // ══ Step 2: 提取每所学校的相关内容 ══
@@ -2974,6 +2987,13 @@ ${schoolNameList}
     ];
 
     let schoolDataContext = '';
+
+    // 专项查询：除内部资料外，同步到各校官网核对
+    let officialMap = {};
+    if(finalMode === 'query' && OFFICIAL_CHECK_ENABLED){
+      const kw = officialKw.length ? officialKw : searchKeywords.filter(k=>/^[\x00-\x7f]+$/.test(k));
+      officialMap = await officialCheck(matchedSchools.slice(0, OFFICIAL_MAX), kw);
+    }
 
     if(finalMode === 'query'){
       const MAX = matchedSchools.length;
@@ -2998,6 +3018,16 @@ ${schoolNameList}
         }
 
         if(!content) return null;
+        if(OFFICIAL_CHECK_ENABLED){
+          const o = officialMap[name];
+          if(o && o.pages && o.pages.length){
+            content += o.pages.map(pg=>`[官网内容（${pg.url}）]:\n${pg.text}`).join('\n\n') + '\n';
+          } else if(matchedSchools.indexOf(s) >= OFFICIAL_MAX){
+            content += '[官网内容]: （本次未检索官网）\n';
+          } else {
+            content += '[官网内容]: （官网暂时无法访问或未找到相关页面）\n';
+          }
+        }
         return `【${nameCn}（${name}）· ${state}】\n${content.trim()}`;
       }).filter(Boolean).join('\n\n---\n\n');
 
@@ -3015,7 +3045,13 @@ ${schoolNameList}
         const hl     = (s['亮点总结（Highlights）']||'').substring(0,120);
         const ge     = s['GE评级'] || '';
         const fs     = s['2027 FS排名'] || '';
-        return `${name}|${nameCn}|${state}|${cost}|托福${toefl}|${ge}|FS${fs}|体育:${sports}|艺术:${arts}|${hl}`;
+        const g1 = (s['开设年级 Grades']||'').toString().substring(0,20);
+        const ty = (s['类型 Type']||'').toString().substring(0,12);
+        const bd = (s['住校学生数量 Boarding %']||'').toString().substring(0,12);
+        const cn = (s['中国学生数量Chinese Student %']||'').toString().substring(0,16);
+        const esl = (s['ESL语言支持']||'').toString().substring(0,10);
+        const ev = mustHave.length ? ('|命中证据:' + mustEvidence(s, mustHave)) : '';
+        return `${name}|${nameCn}|${state}|${cost}|托福${toefl}|${ge}|FS${fs}|年级${g1}|${ty}|住校${bd}|中国学生${cn}|ESL${esl}|体育:${sports}|艺术:${arts}|${hl}${ev}`;
       }).join('\n');
     }
 
@@ -3046,7 +3082,8 @@ ${schoolNameList}
 
 ${schoolDataContext}
 
-请严格基于以上真实数据生成报告，不要编造任何信息。按以下JSON格式输出：
+请严格基于以上真实数据生成报告，不要编造任何信息。${OFFICIAL_CHECK_ENABLED ? `
+每所学校除内部资料外还附有[官网内容]。请把内部资料与官网内容逐项核对：二者一致的直接采用；官网有更新、更准确或更详细的内容，以官网为准并补充；二者冲突的以官网为准，并在 official_check 中说明差异；官网内容缺失或未涉及该主题的，official_check 填“官网暂未核对到相关内容”，正文只用内部资料。` : ''}按以下JSON格式输出：
 
 {
   "title": "报告标题（简洁，如：Marvelwood School 马术项目详细报告）",
@@ -3058,7 +3095,8 @@ ${schoolDataContext}
       "state": "州代码",
       "project_detail": "基于真实推文的介绍（200字以内，涵盖项目特色、参与方式等）",
       "highlights": ["亮点1", "亮点2", "亮点3"],
-      "suitable_for": "适合什么学生（25字内）"
+      "suitable_for": "适合什么学生（25字内）"${OFFICIAL_CHECK_ENABLED ? `,
+      "official_check": "官网核对结果（40字内，如：官网一致 / 官网补充了XX / 官网显示与内部信息有出入：XX / 官网暂未核对到相关内容）"` : ''}
     }
   ],
   "conclusion": "总结（2-3句话）"
@@ -3076,9 +3114,15 @@ ${schoolDataContext}
 用户需求：「${input}」
 解析结果：${scopeLabel}，查询主题「${searchTopic}」
 
-以下是相关学校真实数据：
+${mustHave.length ? `用户的硬性要求：${mustHave.map(g=>g.join('/')).join(' 且 ')}。下方列表已按该要求精确筛选，每所学校的“命中证据”就是依据；只能推荐下方列表中的学校，不得推荐列表之外的学校。\n` : '下方是全部候选学校，只能从中推荐，不得推荐列表之外的学校。\n'}
+以下是候选学校真实数据（字段顺序：英文名|中文名|州|年费|托福|GE评级|FS排名|开设年级|类型|住校比例|中国学生|ESL|体育|艺术|亮点）：
 
 ${schoolDataContext}
+
+匹配规则：
+- 严格对照用户给出的学生情况（年级、托福、预算、地区、性别/学校类型、特色需求等），条件明显不符的学校不要推荐（如托福要求高于学生成绩、年费远超预算、开设年级不含学生年级）
+- 宁缺毋滥：符合条件的学校不足时，有几所就输出几所，不要凑数
+- 推荐理由必须引用该校真实数据中的具体信息
 
 请基于真实数据，按以下JSON格式输出择校推荐报告：
 
@@ -3283,6 +3327,85 @@ async function testCurrentAPI(){
     resEl.textContent='❌ '+(e.name==='AbortError'?'连接超时（20秒）':e.message);
   }
 }
+// ── 硬性要求精确匹配 / 官网核对 ──
+const OFFICIAL_CHECK_ENABLED = true;
+const OFFICIAL_MAX = 10;
+const MUST_FIELDS = [
+  '学校开设体育项目罗列 Athletic/Sports','学校开设艺术项目罗列（艺术课程）Arts','学校开设特色项目罗列 Signature programs',
+  '体育','艺术','课程','类型 Type','宗教 Religion','亮点总结（Highlights）','学校推文','拓展推文','特色择校'
+];
+function schoolMeetsMust(s, groups){
+  const text = MUST_FIELDS.map(f=>s[f]||'').join(' ').toLowerCase();
+  return groups.every(g=>g.some(kw=>text.includes(kw.toLowerCase())));
+}
+function mustEvidence(s, groups){
+  const out=[];
+  groups.forEach(g=>{
+    for(const f of MUST_FIELDS){
+      const v=String(s[f]||''), lo=v.toLowerCase();
+      const kw=g.find(k=>lo.includes(k.toLowerCase()));
+      if(kw){ const i=lo.indexOf(kw.toLowerCase()); out.push(v.slice(Math.max(0,i-20),i+kw.length+50).replace(/\s+/g,' ')); break; }
+    }
+  });
+  return out.join(' ; ').substring(0,160);
+}
+async function jinaFetch(url, timeoutMs){
+  const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), timeoutMs||15000);
+  try{
+    const r = await fetch('https://r.jina.ai/'+url, {signal:ctrl.signal, headers:{'Accept':'text/plain','X-With-Links-Summary':'true'}});
+    if(!r.ok) return null;
+    return await r.text();
+  }catch(e){ return null; } finally { clearTimeout(t); }
+}
+function officialWindows(text, kws, maxLen){
+  const lo = text.toLowerCase(), parts=[]; let used=0;
+  for(const kw of kws){
+    let from=0, n=0;
+    while(n<2){
+      const i = lo.indexOf(kw.toLowerCase(), from); if(i<0) break;
+      const seg = text.slice(Math.max(0,i-150), i+450).replace(/\s+/g,' ');
+      parts.push(seg); used+=seg.length; from=i+450; n++;
+      if(used>=maxLen) return parts.join(' … ');
+    }
+  }
+  return parts.join(' … ');
+}
+async function officialCheck(schools, kws){
+  const result = {};
+  const keys = (kws&&kws.length ? kws : ['athletics','academics']).slice(0,6);
+  let done = 0;
+  const work = async (s)=>{
+    const name = s['学校名称(School Name）'];
+    const m = String(s['参考官网 Website']||'').match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}[^\s，,；;)）]*/i);
+    if(!m){ result[name]={pages:[]}; return; }
+    const base = /^https?:\/\//i.test(m[0]) ? m[0] : 'https://'+m[0];
+    const pages = [];
+    const home = await jinaFetch(base, 15000);
+    if(home){
+      const w = officialWindows(home, keys, 1200);
+      if(w) pages.push({url:base, text:w});
+      // 在首页链接中找与主题最相关的 1 个页面
+      let host=''; try{ host=new URL(base).hostname.replace(/^www\./,''); }catch(e){}
+      const links=[...home.matchAll(/\[([^\]]{1,80})\]\((https?:\/\/[^)\s]+)\)/g)].map(x=>({t:x[1],u:x[2]}));
+      const hit = links.find(l=>{
+        let ok=false; try{ ok=new URL(l.u).hostname.includes(host); }catch(e){}
+        const s2=(l.t+' '+l.u).toLowerCase();
+        return ok && l.u!==base && keys.some(k=>s2.includes(k.toLowerCase()));
+      });
+      if(hit){
+        const sub = await jinaFetch(hit.u, 15000);
+        if(sub){ const w2=officialWindows(sub, keys, 2000); if(w2) pages.push({url:hit.u, text:w2}); else pages.push({url:hit.u, text:sub.replace(/\s+/g,' ').slice(0,1500)}); }
+      }
+    }
+    result[name]={pages};
+    done++; setProgress(`🔎 正在核对学校官网… ${done}/${schools.length}`);
+  };
+  setProgress(`🔎 正在核对学校官网… 0/${schools.length}`);
+  const queue = schools.slice();
+  const workers = Array.from({length:3},async()=>{ while(queue.length){ await work(queue.shift()); } });
+  await Promise.race([Promise.all(workers), new Promise(res=>setTimeout(res, 60000))]);
+  return result;
+}
 function searchByKeywords(keywords){
   const SEARCH_FIELDS = [
     '学校推文','拓展推文','特色择校','短期项目','录取捷报',
@@ -3476,6 +3599,7 @@ function renderReport(report, mode){
           <div class="ai-reason">${s.project_detail||''}</div>
           ${highlights?`<div class="ai-match-tags" style="margin-top:8px;">${highlights}</div>`:''}
           ${s.suitable_for?`<div style="margin-top:8px;font-size:.72rem;color:rgba(255,255,255,.4);">👤 适合：${s.suitable_for}</div>`:''}
+          ${s.official_check?`<div style="margin-top:6px;font-size:.72rem;color:#8fd0c0;">🔎 官网核对：${s.official_check}</div>`:''}
         </div>
       </div>`;
     });
@@ -3685,6 +3809,7 @@ ${infoTable(sc)}
 <p><b>项目介绍：</b>${s.project_detail||''}</p>
 ${(s.highlights||[]).length?`<p><b>亮点：</b>${s.highlights.join('；')}</p>`:''}
 ${s.suitable_for?`<p style="color:#888;font-size:9pt;">👤 适合：${s.suitable_for}</p>`:''}
+${s.official_check?`<p style="color:#2d7a6a;font-size:9pt;">🔎 官网核对：${s.official_check}</p>`:''}
 </div>`;
     });
     if(report.conclusion) content+=`<h2>总结建议</h2><p>${report.conclusion}</p>`;
@@ -3719,7 +3844,7 @@ function downloadAIXlsx(){
   const {report, mode, query, matchCount, generatedAt} = lastAIReport;
   const isQuery = mode==='query';
   const HEADERS = isQuery
-    ? ['序号','学校名称（英文）','学校名称（中文）','州','GE评级','类型','宗教','学生人数','国际生年级','年费（含食宿）','托福最低','新版托福','课程体系','临近城市','近期活动','学校亮点','项目详情','核心亮点','适合学生']
+    ? ['序号','学校名称（英文）','学校名称（中文）','州','GE评级','类型','宗教','学生人数','国际生年级','年费（含食宿）','托福最低','新版托福','课程体系','临近城市','近期活动','学校亮点','项目详情','核心亮点','适合学生','官网核对']
     : ['序号','推荐类型','学校名称（英文）','学校名称（中文）','州','GE评级','类型','宗教','学生人数','国际生年级','年费（含食宿）','托福最低','新版托福','课程体系','临近城市','近期活动','学校亮点','推荐理由','核心亮点','注意事项'];
   const clean = v=>(v||'').toString().replace(/[\r\n\t]+/g,' ').trim();
   const getInfo = n=>{const i=findSchoolIndex(n);return i>=0?SCHOOLS[i]:null;};
@@ -3736,7 +3861,7 @@ function downloadAIXlsx(){
       T(sc,'GE评级'),T(sc,'类型 Type'),T(sc,'宗教 Religion'),T(sc,'全校学生数量 Student Body'),
       T(sc,'国际生年级Grades open for International students'),cost,
       T(sc,'TOEFL Mini. （以9年级为标准）'),T(sc,'新版托福要求'),curr,city,T(sc,'近期活动'),hl,
-      clean(s.project_detail||''),clean((s.highlights||[]).join('；')),clean(s.suitable_for||'')];
+      clean(s.project_detail||''),clean((s.highlights||[]).join('；')),clean(s.suitable_for||''),clean(s.official_check||'')];
     return [s.rank,clean(s.type||''),clean(s.name_en),clean(s.name_cn||s.name_en),clean(s.state||T(sc,'州 State')),
       T(sc,'GE评级'),T(sc,'类型 Type'),T(sc,'宗教 Religion'),T(sc,'全校学生数量 Student Body'),
       T(sc,'国际生年级Grades open for International students'),cost,
