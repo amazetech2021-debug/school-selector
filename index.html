@@ -1042,14 +1042,24 @@ a.dtv-link:hover{text-decoration:underline;}
       <div class="ai-form-title">输入任意查询需求，AI 将检索全部学校真实数据（推文、体育、艺术、亮点、内部培训笔记等），生成基于真实内容的专业报告</div>
 
       
-            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px;">
-        <label class="ai-mode-btn" style="justify-content:flex-start;">
-          <input type="radio" name="ai-provider" value="deepseek" checked>
-          <span>DeepSeek V4-Pro &nbsp;<span style="font-size:.62rem;color:rgba(255,255,255,.3);">api.deepseek.com</span></span>
+            <div class="ai-section-lbl">🤖 大模型配置</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">
+        <label style="display:flex;flex-direction:column;gap:5px;color:rgba(255,255,255,.62);font-size:.72rem;">
+          API 接口地址（OpenAI 兼容）
+          <input id="ai-api-url" type="url" autocomplete="url" placeholder="例如：https://api.deepseek.com/chat/completions" style="box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(255,255,255,.06);color:#fff;font:inherit;">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;color:rgba(255,255,255,.62);font-size:.72rem;">
+          模型名称
+          <input id="ai-model" type="text" autocomplete="off" placeholder="例如：deepseek-chat、gpt-4o" style="box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(255,255,255,.06);color:#fff;font:inherit;">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;color:rgba(255,255,255,.62);font-size:.72rem;">
+          API Key
+          <input id="ai-apikey" type="password" autocomplete="new-password" placeholder="粘贴所选模型服务的 API Key" style="box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(255,255,255,.06);color:#fff;font:inherit;">
         </label>
       </div>
+      <div style="font-size:.64rem;color:rgba(255,255,255,.35);line-height:1.6;margin-bottom:6px;">支持 DeepSeek 或其他 OpenAI 兼容接口。接口地址和模型名保存在本机浏览器；API Key 只在当前页面内存中使用，刷新后需重新输入。浏览器直连还需服务端允许跨域请求。</div>
       <div style="margin-top:6px;margin-bottom:2px;">
-        <button onclick="testCurrentAPI()" style="width:100%;padding:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:rgba(255,255,255,.55);font-size:.72rem;cursor:pointer;font-family:'Noto Sans SC',sans-serif;transition:all .16s;" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='rgba(255,255,255,.15)';this.style.color='rgba(255,255,255,.55)'">🔌 测试当前 API 连通性</button>
+        <button onclick="testCurrentAPI()" style="width:100%;padding:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:rgba(255,255,255,.55);font-size:.72rem;cursor:pointer;font-family:'Noto Sans SC',sans-serif;transition:all .16s;" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='rgba(255,255,255,.15)';this.style.color='rgba(255,255,255,.55)'">🔌 测试模型连通性</button>
         <div id="api-test-result" style="margin-top:5px;font-size:.7rem;display:none;padding:6px 10px;border-radius:5px;line-height:1.5;"></div>
       </div>
 
@@ -2804,6 +2814,7 @@ function generateFilterReport(schools,fileLabel){
 let lastAIReport = null; // Store last report for download
 
 function openAI(){
+  restoreAIConfig();
   document.getElementById('ai-panel').classList.add('open');
   document.getElementById('ai-panel').scrollTop=0;
   document.body.style.overflow='hidden';
@@ -2937,6 +2948,72 @@ function extractRelevantContent(s, query){
   return parts.join('\n');
 }
 
+const AI_CONFIG_STORAGE_KEY = 'schoolSelectorAIConfig';
+
+function saveAISettings(){
+  const rawUrl = document.getElementById('ai-api-url')?.value.trim() || '';
+  const model = document.getElementById('ai-model')?.value.trim() || '';
+  let url = rawUrl;
+  try {
+    const parsed = new URL(rawUrl);
+    ['key', 'api_key', 'apikey', 'token', 'access_token', 'authorization'].forEach(name=>parsed.searchParams.delete(name));
+    url = parsed.toString();
+  } catch(e) {
+    // 地址填写完成前不阻断页面操作。
+  }
+  try {
+    localStorage.setItem(AI_CONFIG_STORAGE_KEY, JSON.stringify({url, model}));
+  } catch(e) {
+    // 本地存储不可用时，仍可手动填写模型配置。
+  }
+}
+
+function restoreAIConfig(){
+  const urlInput = document.getElementById('ai-api-url');
+  const modelInput = document.getElementById('ai-model');
+  if(!urlInput || !modelInput) return;
+  if(!urlInput.dataset.storageBound){
+    urlInput.addEventListener('change', saveAISettings);
+    modelInput.addEventListener('change', saveAISettings);
+    urlInput.dataset.storageBound = 'true';
+  }
+  if(urlInput.value || modelInput.value) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_CONFIG_STORAGE_KEY) || '{}');
+    urlInput.value = saved.url || '';
+    modelInput.value = saved.model || '';
+  } catch(e) {
+    // 本地存储不可用时，仍可手动填写模型配置。
+  }
+}
+
+function hideAIKey(text, key){
+  return String(text || '').replaceAll(key, '[已隐藏]');
+}
+
+function getAIConfig(){
+  const rawUrl = document.getElementById('ai-api-url')?.value.trim() || '';
+  const model = document.getElementById('ai-model')?.value.trim() || '';
+  const key = document.getElementById('ai-apikey')?.value.trim() || '';
+  if(!rawUrl) throw new Error('请填写模型 API 接口地址');
+  if(!model) throw new Error('请填写模型名称');
+  if(!key) throw new Error('请填写 API Key');
+
+  let parsedUrl;
+  try { parsedUrl = new URL(rawUrl); }
+  catch(e) { throw new Error('API 接口地址格式不正确'); }
+  if(!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('API 接口地址必须使用 HTTP 或 HTTPS');
+  const secretParam = /^(?:key|api[_-]?key|token|access[_-]?token|authorization)$/i;
+  if(Array.from(parsedUrl.searchParams.keys()).some(name=>secretParam.test(name))){
+    throw new Error('请将 API Key 填入单独的输入框，不要放在接口地址参数中');
+  }
+  parsedUrl.pathname = parsedUrl.pathname.replace(/\/+$/, '');
+  if(!/\/chat\/completions$/i.test(parsedUrl.pathname)) parsedUrl.pathname += '/chat/completions';
+  const url = parsedUrl.toString();
+  saveAISettings();
+  return {url, model, key};
+}
+
 async function runAI(){
   const input = document.getElementById('ai-input').value.trim();
   const mode  = document.querySelector('input[name="ai-mode"]:checked')?.value || 'query';
@@ -2944,13 +3021,13 @@ async function runAI(){
   if(!input || input.length < 5){
     showAIError('请输入查询需求（至少5个字）'); return;
   }
-  const apiKey = document.getElementById('ai-apikey') ? document.getElementById('ai-apikey').value.trim() : '';
-  const provider = document.querySelector('input[name="ai-provider"]:checked')?.value || 'deepseek';
-  // API Keys are pre-configured
-  const API_CONFIGS = {
-    deepseek: { url:'https://api.deepseek.com/chat/completions', key:'sk-4c3e0cdb678c435fba4d4917dcc16b91', model:'deepseek-v4-pro', type:'openai' },
-  };
-  const providerCfg = API_CONFIGS[provider];
+  let providerCfg;
+  try {
+    providerCfg = getAIConfig();
+  } catch(e) {
+    showAIError(e.message);
+    return;
+  }
 
   document.getElementById('ai-error').style.display='none';
   document.getElementById('ai-download-area').style.display='none';
@@ -2965,7 +3042,7 @@ async function runAI(){
 
   try{
     // ══ Step 0: AI 解析指令 ══
-    // 让 DeepSeek 理解用户意图：区分目标学校、查询主题、输出要求
+    // 让大模型理解用户意图：区分目标学校、查询主题、输出要求
     const schoolNameList = SCHOOLS.map(s=>s['学校名称(School Name）']).join('\n');
     const parsePrompt = `你是一个指令解析器。用户给了一条关于美国高中信息查询的指令，请解析其意图。
 
@@ -2999,7 +3076,7 @@ ${schoolNameList}
       '你是指令解析器。只输出纯JSON，不加任何markdown格式（不加```json```），不加说明文字，不加代码块标记。', 'none');
     const parseText = stripMarkdown(parseResp._text || '');
     if(!parseText.trim()){
-      throw new Error('API 返回内容为空。可能原因：\n1. API Key 余额不足（请登录 platform.deepseek.com 查看）\n2. 网络问题\n\n完整响应：'+JSON.stringify(parseResp).slice(0,300));
+      throw new Error('API 返回内容为空。可能原因：\n1. API Key 余额或权限不足，请登录对应模型服务商控制台检查\n2. 网络问题\n\n完整响应：'+JSON.stringify(parseResp).slice(0,300));
     }
     const parseMatch = parseText.match(/\{[\s\S]*\}/);
     if(!parseMatch){
@@ -3334,7 +3411,7 @@ function stripMarkdown(text){
 
 async function callAI(cfg, prompt, maxTokens, systemPrompt, reasoningEffort){
   let resp, data;
-  const TIMEOUT_MS = 300000; // 300秒，V4-Pro大模型生成慢
+  const TIMEOUT_MS = 300000; // 300秒，兼容较慢的模型响应
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -3346,8 +3423,6 @@ async function callAI(cfg, prompt, maxTokens, systemPrompt, reasoningEffort){
         {role:'user',   content: prompt}
       ]
     };
-    // V4-Pro 是推理模型，简单任务（指令解析）关闭思考可避免 tokens 被推理过程耗尽
-    if(reasoningEffort) body.reasoning_effort = reasoningEffort;
     resp = await fetch(cfg.url, {
       method: 'POST',
       signal: controller.signal,
@@ -3357,14 +3432,16 @@ async function callAI(cfg, prompt, maxTokens, systemPrompt, reasoningEffort){
       },
       body: JSON.stringify(body)
     });
-    if(!resp.ok){ const t=await resp.text(); throw new Error('API错误 '+resp.status+': '+t.substring(0,300)); }
+    if(!resp.ok){ const t=hideAIKey(await resp.text(), cfg.key); throw new Error('API错误 '+resp.status+': '+t.substring(0,300)); }
     data = await resp.json();
-    if(data.error) throw new Error(data.error.message||'API 错误');
+    if(data.error) throw new Error(hideAIKey(data.error.message || 'API 错误', cfg.key));
     const msg = data.choices?.[0]?.message||{};
-    // V4-Pro 是推理模型：思考过程在 reasoning_content，最终答案在 content。
-    // 若 content 为空（常见于 max_tokens 不足、思考未走完），回退取 reasoning_content 中的 JSON 片段。
-    data._text = msg.content || msg.reasoning_content || '';
-    data._usedReasoningFallback = !msg.content && !!msg.reasoning_content;
+    // 兼容文本数组和推理模型返回的 reasoning_content。
+    const contentText = Array.isArray(msg.content)
+      ? msg.content.map(part=>part.text || '').join(' ')
+      : msg.content;
+    data._text = contentText || msg.reasoning_content || '';
+    data._usedReasoningFallback = !contentText && !!msg.reasoning_content;
   } catch(e) {
     if(e.name==='AbortError') throw new Error('请求超时（超过5分钟），请稍后重试或减少查询范围');
     throw e;
@@ -3375,43 +3452,50 @@ async function callAI(cfg, prompt, maxTokens, systemPrompt, reasoningEffort){
 }
 
 async function testCurrentAPI(){
-  const provider = document.querySelector('input[name="ai-provider"]:checked')?.value || 'deepseek';
-  const CFGS = {
-    deepseek:     { url:'https://api.deepseek.com/chat/completions',       key:'sk-4c3e0cdb678c435fba4d4917dcc16b91',                         model:'deepseek-v4-pro'             },
-    siliconflow:  { url:'https://api.siliconflow.com/v1/chat/completions', key:'sk-cjknmtdncilmgfzdobbypxkuvjcldjdbprmhrnzwhlmoncpw',       model:'deepseek-ai/DeepSeek-V3'     },
-    siliconflow2: { url:'https://api.siliconflow.com/v1/chat/completions', key:'sk-tbksayzopakytixvfhsavztcoxeqylhafsqaizxogbfqtott',       model:'deepseek-ai/DeepSeek-V4-Pro' },
-  };
-  const cfg = CFGS[provider];
   const resEl = document.getElementById('api-test-result');
   resEl.style.display='block';
   resEl.style.background='rgba(255,255,255,.05)';
   resEl.style.color='rgba(255,255,255,.5)';
-  resEl.textContent='⏳ 正在测试 ' + cfg.model + ' …';
-  const t0 = Date.now();
+  let cfg;
   try {
-    const ctrl = new AbortController();
-    const tmr = setTimeout(()=>ctrl.abort(), 20000);
-    const resp = await fetch(cfg.url, {
-      method:'POST', signal:ctrl.signal,
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
-      body:JSON.stringify({model:cfg.model, max_tokens:100, reasoning_effort:'none', messages:[{role:'user',content:'回复"ok"'}]})
-    });
-    clearTimeout(tmr);
-    const ms = Date.now()-t0;
-    if(!resp.ok){
-      const t=await resp.text();
-      resEl.style.background='rgba(139,58,58,.2)'; resEl.style.color='#e8a0a0';
-      resEl.textContent='❌ 连接失败 HTTP '+resp.status+' · '+t.substring(0,150);
-      return;
-    }
-    const d = await resp.json();
-    const msg = d.choices?.[0]?.message||{};
-    const reply = msg.content || msg.reasoning_content || '(无回复，可能是余额不足)';
-    resEl.style.background='rgba(45,122,106,.2)'; resEl.style.color='#7dd4c4';
-    resEl.textContent='✅ 连接成功！模型: '+cfg.model+' · 响应时间: '+ms+'ms · 回复: '+reply;
+    cfg = getAIConfig();
   } catch(e) {
-    resEl.style.background='rgba(139,58,58,.2)'; resEl.style.color='#e8a0a0';
-    resEl.textContent='❌ '+(e.name==='AbortError'?'连接超时（20秒）':e.message);
+    resEl.style.background='rgba(139,58,58,.2)';
+    resEl.style.color='#e8a0a0';
+    resEl.textContent='❌ '+e.message;
+    return;
+  }
+  resEl.textContent='⏳ 正在测试 '+cfg.model+' …';
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), 20000);
+  try {
+    const resp = await fetch(cfg.url, {
+      method:'POST',
+      signal:controller.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},
+      body:JSON.stringify({model:cfg.model, max_tokens:32, messages:[{role:'user',content:'回复 ok'}]})
+    });
+    if(!resp.ok){
+      const detail = hideAIKey(await resp.text(), cfg.key).substring(0,150);
+      throw new Error('HTTP '+resp.status+' · '+detail);
+    }
+    const data = await resp.json();
+    if(data.error) throw new Error(hideAIKey(data.error.message || 'API 返回错误', cfg.key));
+    const message = data.choices?.[0]?.message || {};
+    const reply = Array.isArray(message.content)
+      ? message.content.map(part=>part.text || '').join(' ')
+      : (message.content || message.reasoning_content || '接口已响应');
+    resEl.style.background='rgba(45,122,106,.2)';
+    resEl.style.color='#7dd4c4';
+    resEl.textContent='✅ 连接成功！模型：'+cfg.model+' · 响应时间：'+(Date.now()-startedAt)+'ms · 回复：'+hideAIKey(reply, cfg.key).substring(0,80);
+  } catch(e) {
+    resEl.style.background='rgba(139,58,58,.2)';
+    resEl.style.color='#e8a0a0';
+    const message = e.name==='AbortError' ? '连接超时（20秒）' : e.message;
+    resEl.textContent='❌ '+hideAIKey(message, cfg.key)+(message==='Failed to fetch' ? '。请检查网络、接口地址和服务端跨域设置。' : '');
+  } finally {
+    clearTimeout(timer);
   }
 }
 // ── 硬性要求精确匹配 / 官网核对 ──
