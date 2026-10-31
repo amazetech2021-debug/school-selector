@@ -2953,13 +2953,15 @@ const AI_CONFIG_STORAGE_KEY = 'schoolSelectorAIConfig';
 function saveAISettings(){
   const rawUrl = document.getElementById('ai-api-url')?.value.trim() || '';
   const model = document.getElementById('ai-model')?.value.trim() || '';
-  let url = rawUrl;
+  let url = '';
   try {
     const parsed = new URL(rawUrl);
+    parsed.username = '';
+    parsed.password = '';
     ['key', 'api_key', 'apikey', 'token', 'access_token', 'authorization'].forEach(name=>parsed.searchParams.delete(name));
     url = parsed.toString();
   } catch(e) {
-    // 地址填写完成前不阻断页面操作。
+    // 地址填写完成前不将无效输入保存到本地。
   }
   try {
     localStorage.setItem(AI_CONFIG_STORAGE_KEY, JSON.stringify({url, model}));
@@ -3003,6 +3005,7 @@ function getAIConfig(){
   try { parsedUrl = new URL(rawUrl); }
   catch(e) { throw new Error('API 接口地址格式不正确'); }
   if(!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('API 接口地址必须使用 HTTP 或 HTTPS');
+  if(parsedUrl.username || parsedUrl.password) throw new Error('请勿将 API Key 放在接口地址中');
   const secretParam = /^(?:key|api[_-]?key|token|access[_-]?token|authorization)$/i;
   if(Array.from(parsedUrl.searchParams.keys()).some(name=>secretParam.test(name))){
     throw new Error('请将 API Key 填入单独的输入框，不要放在接口地址参数中');
