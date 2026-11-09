@@ -1,0 +1,5 @@
+# macOS
+.DS_Store
+
+# OMC 运行时状态（操作工件，不提交）
+.omc/
