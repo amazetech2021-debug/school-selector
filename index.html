@@ -1213,7 +1213,7 @@ const FILTER_DEFS = [
   ]},
   {key:'actinfo',label:'活动信息',chips:(()=>{
     const cnt={};
-    SCHOOLS.forEach(s=>{const v=String(s['近期活动']||'').trim();if(v)cnt[v]=(cnt[v]||0)+1;});
+    SCHOOLS.forEach(s=>String(s['近期活动']||'').split(/[、,，;；\s]+/).forEach(c=>{c=c.trim();if(c)cnt[c]=(cnt[c]||0)+1;}));
     return Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).map(c=>({v:c,l:'🎪 '+c}));
   })()},
   {key:'actcity',label:'活动城市',chips:(()=>{
