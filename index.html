@@ -3063,13 +3063,16 @@ async function runAI(){
   try{
     // ══ Step 0: AI 解析指令 ══
     // 让大模型理解用户意图：区分目标学校、查询主题、输出要求
-    const schoolNameList = SCHOOLS.map(s=>s['学校名称(School Name）']).join('\n');
+    // 先在本地精确识别输入里出现的学校名（长名优先，避免 Kent School 误中 Kent Place School），
+    // 把学校名从指令里剥离，只把真正的“查询要求”交给大模型解析 —— 学校很多时也不会撑爆输出
+    const localPre = localParseSchools(input);
+    const schoolNameList = localPre.schools.length ? '' : SCHOOLS.map(s=>s['学校名称(School Name）']).join('\n');
     const parsePrompt = `你是一个指令解析器。用户给了一条关于美国高中信息查询的指令，请解析其意图。
 
-用户指令：「${input}」
-
+用户指令：「${localPre.schools.length ? localPre.rest : input}」
+${localPre.schools.length ? `（用户已指定 ${localPre.schools.length} 所学校，学校名已由系统识别，target_schools 返回空数组即可，scope 填 specific）` : `
 可用学校名称列表（如果用户指定了学校，从中匹配）：
-${schoolNameList}
+${schoolNameList}`}
 
 请严格按以下JSON格式输出，不输出其他内容：
 {
@@ -3092,9 +3095,24 @@ ${schoolNameList}
 - official_keywords：2-5个英文关键词，用于到学校官网找到相关页面；无明确主题时返回空数组`;
 
     setProgress('🔍 解析指令中…');
-    const parseResp = await callAI(providerCfg, parsePrompt, 3000,
-      '你是指令解析器。只输出纯JSON，不加任何markdown格式（不加```json```），不加说明文字，不加代码块标记。', 'none');
-    const parseText = stripMarkdown(parseResp._text || '');
+    let parseResp, parseText = '';
+    try{
+      parseResp = await callAI(providerCfg, parsePrompt, 8000,
+        '你是指令解析器。只输出纯JSON，不加任何markdown格式（不加```json```），不加说明文字，不加代码块标记，不要输出思考过程。', 'none');
+      parseText = stripMarkdown(parseResp._text || '');
+    }catch(e){
+      // 网络/鉴权类错误照常抛出；解析环节本身出问题走下面的本地兜底
+      throw e;
+    }
+    // 推理型模型可能把思考过程当正文返回、或输出被截断：此时不再报错，改用本地解析兜底
+    let usedLocalParse = false;
+    if(!parseText.trim() || !/\{[\s\S]*\}/.test(parseText) || parseResp._usedReasoningFallback){
+      if(parseText.trim() || localPre.schools.length){
+        usedLocalParse = true;
+        parseText = JSON.stringify(localFallbackParse(input, localPre));
+        setProgress('⚠️ 模型未按格式返回，已改用本地解析指令…');
+      }
+    }
     if(!parseText.trim()){
       throw new Error('API 返回内容为空。可能原因：\n1. API Key 余额或权限不足，请登录对应模型服务商控制台检查\n2. 网络问题\n\n完整响应：'+JSON.stringify(parseResp).slice(0,300));
     }
@@ -3117,7 +3135,11 @@ ${schoolNameList}
       }
     }
 
-    const targetSchools   = parsed.target_schools || [];
+    let targetSchools   = parsed.target_schools || [];
+    if(localPre.schools.length){ // 以本地精确识别为准
+      targetSchools = localPre.schools.slice();
+      parsed.scope = 'specific';
+    }
     const searchTopic     = parsed.search_topic || input;
     const searchKeywords  = parsed.search_keywords || [searchTopic];
     const outputReq       = parsed.output_requirement || '';
@@ -3518,6 +3540,40 @@ async function testCurrentAPI(){
     clearTimeout(timer);
   }
 }
+// ── 本地解析：识别指令里的学校名 ──
+function localParseSchools(text){
+  let work = String(text||'');
+  const names = SCHOOLS.map(s=>s['学校名称(School Name）']).filter(Boolean).sort((a,b)=>b.length-a.length);
+  const found = [];
+  const esc = x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  for(const n of names){
+    const re = new RegExp('(^|[^A-Za-z])'+esc(n).replace(/\s+/g,'\\s+')+'(?![A-Za-z])','i');
+    if(re.test(work)){
+      found.push(n);
+      work = work.replace(new RegExp(esc(n).replace(/\s+/g,'\\s+'),'ig'),' ');
+    }
+  }
+  const rest = work.split(/\n+/).map(x=>x.trim()).filter(Boolean).join('；') || String(text||'').slice(-200);
+  return {schools:found, rest};
+}
+const ZH_EN_KW = {网球:['tennis'],游泳:['swim','swimming','aquatic'],篮球:['basketball'],足球:['soccer'],马术:['equestrian','horseback','riding'],高尔夫:['golf'],滑雪:['ski','skiing','snowboard'],曲棍球:['hockey'],冰球:['ice hockey','hockey'],长曲棍球:['lacrosse'],橄榄球:['football'],棒球:['baseball'],垒球:['softball'],排球:['volleyball'],壁球:['squash'],划船:['crew','rowing'],击剑:['fencing'],田径:['track'],越野:['cross country'],羽毛球:['badminton'],乒乓球:['table tennis'],摔跤:['wrestling'],射击:['shooting'],音乐:['music'],戏剧:['theater','theatre','drama'],舞蹈:['dance'],绘画:['painting','art'],美术:['art','visual arts'],机器人:['robotics'],商科:['business','entrepreneur'],航空:['aviation'],编程:['computer science','coding'],ESL:['ESL']};
+function localFallbackParse(input, pre){
+  const rest = (pre && pre.rest) || input;
+  const kws = [], en = [];
+  Object.keys(ZH_EN_KW).forEach(k=>{ if(rest.includes(k)){ kws.push(k); ZH_EN_KW[k].forEach(x=>{kws.push(x); en.push(x);}); } });
+  const topic = (Object.keys(ZH_EN_KW).find(k=>rest.includes(k)) || rest.replace(/整理|以上|学校的?|详细|情况|查询|项目/g,'').trim().slice(0,12) || '查询') + (kws.length?'项目':'');
+  return {
+    intent:'query',
+    target_schools: (pre&&pre.schools)||[],
+    search_topic: topic,
+    search_keywords: kws.length ? kws : [rest.slice(0,20)],
+    output_requirement: rest,
+    scope: (pre&&pre.schools&&pre.schools.length) ? 'specific' : 'all',
+    must_have: [],
+    official_keywords: en
+  };
+}
+
 // ── 硬性要求精确匹配 / 官网核对 ──
 const OFFICIAL_CHECK_ENABLED = true;
 const OFFICIAL_MAX = 10;
