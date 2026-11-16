@@ -78,8 +78,25 @@ aside{
   font-size:.82rem;outline:none;
 }
 .sb input:focus{border-color:var(--gold);}
+.sb textarea{width:100%;padding:9px 12px 9px 33px;background:rgba(255,255,255,.07);border:1px solid rgba(201,168,76,.2);border-radius:7px;color:#fff;font-family:'Noto Sans SC',sans-serif;font-size:.82rem;line-height:1.45;outline:none;resize:none;display:block;overflow-y:auto;max-height:150px;min-height:37px;box-sizing:border-box;}
+.sb textarea:focus{border-color:var(--gold);}
+.sb textarea::placeholder{color:rgba(255,255,255,.28);}
+.batch-panel{display:none;margin:-6px 0 14px;padding:8px 9px;background:rgba(255,255,255,.05);border:1px solid rgba(201,168,76,.25);border-radius:7px;font-size:.72rem;color:rgba(255,255,255,.75);}
+.batch-panel.show{display:block;}
+.bp-hd{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px;line-height:1.5;}
+.bp-hd b{color:var(--gold);}.bp-hd .bad{color:#e8a0a0;font-weight:600;}
+.bp-hd button{margin-left:auto;padding:3px 9px;border-radius:5px;border:1px solid rgba(201,168,76,.5);background:rgba(201,168,76,.12);color:var(--gold);font-size:.7rem;cursor:pointer;}
+.bp-hd button+button{margin-left:0;}
+.bp-list{max-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;}
+.bp-row{padding:4px 6px;border-radius:5px;background:rgba(255,255,255,.04);line-height:1.5;word-break:break-word;}
+.bp-row.bad{background:rgba(139,58,58,.18);}
+.bp-in{color:rgba(255,255,255,.5);}
+.bp-chip{display:inline-block;margin:2px 4px 0 0;padding:1px 7px;border-radius:10px;border:1px solid rgba(125,212,196,.5);color:#7dd4c4;cursor:pointer;}
+.bp-chip.off{opacity:.4;text-decoration:line-through;}
+.bp-chip.amb{border-color:rgba(232,200,120,.6);color:#e8c878;}
+.bp-bad{color:#e8a0a0;}
 .sb input::placeholder{color:rgba(255,255,255,.28);}
-.sb::before{content:'🔍';position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:.8rem;opacity:.45;}
+.sb::before{content:'🔍';position:absolute;left:9px;top:19px;transform:translateY(-50%);font-size:.8rem;opacity:.45;}
 .fs{margin-bottom:14px;}
 .ft{font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:7px;display:flex;align-items:center;gap:5px;}
 .ft::after{content:'';flex:1;height:1px;background:rgba(201,168,76,.13);}
@@ -875,7 +892,8 @@ a.dtv-link:hover{text-decoration:underline;}
       <button class="rbtn" onclick="reset()" style="margin-top:6px;">↺ 重置所有筛选</button>
       <button class="filter-report-btn" id="filter-report-btn-desk" onclick="openFilterReport()" style="display:none;margin-top:6px;">📄 导出筛选结果报告 <span id="filter-report-count-desk"></span></button>
     </div>
-    <div class="sb"><input id="search-desk" type="text" placeholder="搜索名称、城市、特色…"></div>
+    <div class="sb"><textarea id="search-desk" rows="1" placeholder="搜索名称、城市、特色…（可粘贴多行学校名，批量对照）"></textarea></div>
+    <div class="batch-panel" id="batch-desk"></div>
     <div class="sb" style="margin-bottom:14px;">
       <input type="text" class="tweet-search-input" id="tweet-search-desk" placeholder="📰 搜索学校推文内容…" oninput="onTweetSearch(this.value)">
     </div>
@@ -955,7 +973,8 @@ a.dtv-link:hover{text-decoration:underline;}
   <button class="rbtn" onclick="reset()">↺ 重置所有筛选</button>
   <button class="filter-report-btn" id="filter-report-btn-mob" onclick="openFilterReport();closeDrawer();" style="display:none;margin-top:6px;margin-bottom:10px;">📄 导出筛选结果报告 <span id="filter-report-count-mob"></span></button>
   <div style="height:10px;"></div>
-  <div class="sb"><input id="search-mob" type="text" placeholder="搜索名称、城市、特色…"></div>
+  <div class="sb"><textarea id="search-mob" rows="1" placeholder="搜索名称、城市、特色…（可粘贴多行学校名，批量对照）"></textarea></div>
+  <div class="batch-panel" id="batch-mob"></div>
   <div class="sb" style="margin-bottom:14px;">
     <input type="text" class="tweet-search-input" id="tweet-search-mob" placeholder="📰 搜索学校推文内容…" oninput="onTweetSearch(this.value)">
   </div>
@@ -1295,10 +1314,91 @@ function updateFilterReportBtn(){
 }
 
 // ─── SEARCH ───
-function syncSearch(val){
+// 名称模糊对照：忽略大小写/标点/括号备注/常见泛词，容忍少量拼写误差
+const NM_STOP=new Set(['the','school','schools','academy','preparatory','prep','high','college','of','and','for','day','boarding','homestay','international','institute','sch','at']);
+function nmNorm(s){return String(s||'').toLowerCase().replace(/[\(（\[【][^\)）\]】]*[\)）\]】]/g,' ').replace(/&/g,' and ').replace(/[’'`´]/g,'').replace(/[^a-z0-9\u4e00-\u9fa5]+/g,' ').trim();}
+function nmTokens(s){return nmNorm(s).split(' ').filter(t=>t&&!NM_STOP.has(t));}
+function nmLev(a,b){const m=a.length,n=b.length;if(!m)return n;if(!n)return m;let p=Array.from({length:n+1},(_,i)=>i);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c;}return p[n];}
+let _nmCache=null;
+function nmIndex(){
+  if(!_nmCache) _nmCache=SCHOOLS.map(s=>{const en=T(s,'学校名称(School Name）'),cn=T(s,'学校名称(中文）');return {s,en:nmNorm(en),tok:nmTokens(en),cn:nmNorm(cn).replace(/\s+/g,'')};});
+  return _nmCache;
+}
+function nmScore(qn,qTok,sc){
+  if(/[\u4e00-\u9fa5]/.test(qn)){
+    const cq=qn.replace(/\s+/g,'');
+    if(!sc.cn||cq.length<2) return 0;
+    if(sc.cn===cq) return 1;
+    if(sc.cn.includes(cq)) return .9;
+    if(cq.includes(sc.cn)&&sc.cn.length>=3) return .88;
+    return 0;
+  }
+  if(qn===sc.en) return 1;
+  if(!qTok.length||!sc.tok.length) return 0;
+  const near=(t,x)=>x===t||(t.length>=4&&x.length>=4&&(x.startsWith(t)||t.startsWith(x)));
+  if(qTok.every(t=>sc.tok.some(x=>near(t,x)))) return .8+.15*Math.min(1,qTok.length/sc.tok.length);
+  if(sc.tok.every(x=>qTok.some(t=>near(t,x)))) return .82;
+  const a=qTok.join(' '),b=sc.tok.join(' ');
+  if(a.length>=4){const sim=1-nmLev(a,b)/Math.max(a.length,b.length);if(sim>=.8) return .6+sim*.3;}
+  return 0;
+}
+function nmMatchLine(line){
+  const qn=nmNorm(line),qTok=nmTokens(line);
+  if(!qn) return [];
+  const sc=nmIndex().map(x=>({x,v:nmScore(qn,qTok,x)})).filter(o=>o.v>=.8);
+  if(!sc.length) return [];
+  const best=Math.max(...sc.map(o=>o.v));
+  return sc.filter(o=>o.v>=best-.05).map(o=>o.x.s);
+}
+// 批量对照状态
+let batchState=null;
+function parseBatch(val){
+  const lines=String(val||'').split(/[\n;；、]+/).map(x=>x.replace(/^\s*(?:[0-9]+[\.\)、]|[-•·*])\s*/,'').trim()).filter(Boolean);
+  if(lines.length<2) return null;
+  const items=lines.map(line=>({line,ms:nmMatchLine(line)}));
+  return {items,excl:new Set(),rebuild(){
+    this.set=new Set();this.order=new Map();
+    this.items.forEach((it,i)=>it.ms.forEach(s=>{if(!this.excl.has(s)){this.set.add(s);if(!this.order.has(s))this.order.set(s,i);}}));
+  }};
+}
+function nameFuzzy(q,s){
+  const qn=nmNorm(q);if(qn.length<3) return false;
+  const sc=nmIndex().find(x=>x.s===s);if(!sc) return false;
+  return nmScore(qn,nmTokens(q),sc)>=.8;
+}
+function renderBatchPanel(){
+  ['batch-desk','batch-mob'].forEach(id=>{
+    const el=document.getElementById(id);if(!el) return;
+    if(!batchState){el.classList.remove('show');el.innerHTML='';return;}
+    const its=batchState.items,bad=its.filter(i=>!i.ms.length).length;
+    const nm=s=>{const c=T(s,'学校名称(中文）'),e=T(s,'学校名称(School Name）');return (c?c+' ':'')+e;};
+    el.innerHTML=`<div class="bp-hd">对照 ${its.length} 行：<b>${batchState.set.size}</b> 所匹配${bad?` · <span class="bad">${bad} 行未匹配</span>`:''}
+      <button onclick="batchPick()">☑ 勾选全部</button><button onclick="syncSearch('')">清空</button></div>
+      <div class="bp-list">${its.map((it,k)=>it.ms.length
+        ?`<div class="bp-row"><span class="bp-in">${k+1}. ${escHtmlBP(it.line)}</span> →${it.ms.map(s=>`<span class="bp-chip${it.ms.length>1?' amb':''}${batchState.excl.has(s)?' off':''}" title="${it.ms.length>1?'该行匹配到多所，点击可去掉不要的':'点击可去掉/恢复'}" onclick="batchToggle(${SCHOOLS.indexOf(s)})">${escHtmlBP(nm(s))}</span>`).join('')}</div>`
+        :`<div class="bp-row bad"><span class="bp-in">${k+1}. ${escHtmlBP(it.line)}</span> → <span class="bp-bad">未找到匹配学校</span></div>`).join('')}</div>`;
+    el.classList.add('show');
+  });
+}
+function escHtmlBP(x){return String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function batchToggle(i){
+  const s=SCHOOLS[i];if(!batchState||!s) return;
+  if(batchState.excl.has(s)) batchState.excl.delete(s); else batchState.excl.add(s);
+  batchState.rebuild();renderBatchPanel();render();
+}
+function batchPick(){
+  if(!batchState) return;
+  batchState.set.forEach(s=>selected.add(T(s,'学校名称(School Name）')));
+  try{saveSelected();}catch(e){}
+  render();
+}
+function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,150)+'px';}
+function syncSearch(val,from){
   searchQ=val;
-  document.getElementById('search-desk').value=val;
-  document.getElementById('search-mob').value=val;
+  ['search-desk','search-mob'].forEach(id=>{const el=document.getElementById(id);if(el&&el.value!==val)el.value=val;if(el)autoGrow(el);});
+  batchState=parseBatch(val);
+  if(batchState) batchState.rebuild();
+  renderBatchPanel();
   render();
 }
 document.getElementById('search-desk').addEventListener('input',e=>syncSearch(e.target.value));
@@ -1453,9 +1553,11 @@ function renderCard(s,i){
 // ─── FILTER LOGIC ───
 function matchFilters(s){
   const q=searchQ.toLowerCase();
-  if(q){
+  if(batchState){
+    if(!batchState.set.has(s)) return false;
+  } else if(q){
     const txt=[T(s,'学校名称(中文）'),T(s,'学校名称(School Name）'),T(s,'城市'),T(s,'州 State'),T(s,'亮点总结（Highlights）'),T(s,'30秒快评'),T(s,'艺术'),T(s,'体育'),T(s,'课程')].join(' ').toLowerCase();
-    if(!txt.includes(q))return false;
+    if(!txt.includes(q)&&!nameFuzzy(searchQ,s))return false;
   }
   const reg=T(s,'地区');
   if(filters.region.length&&!filters.region.some(r=>{
@@ -1639,6 +1741,7 @@ function matchFilters(s){
 }
 
 function sorted(list){
+  if(batchState&&sortMode==='default') return [...list].sort((a,b)=>(batchState.order.get(a)??1e9)-(batchState.order.get(b)??1e9));
   if(sortMode==='asc')return[...list].sort((a,b)=>(parseFloat(a['费用预估（含学费+食宿）'])||999999)-(parseFloat(b['费用预估（含学费+食宿）'])||999999));
   if(sortMode==='desc')return[...list].sort((a,b)=>(parseFloat(b['费用预估（含学费+食宿）'])||0)-(parseFloat(a['费用预估（含学费+食宿）'])||0));
   if(sortMode==='name')return[...list].sort((a,b)=>T(a,'学校名称(中文）').localeCompare(T(b,'学校名称(中文）')));
@@ -1663,9 +1766,10 @@ function setSort(m,btn){
 function reset(){
   Object.keys(filters).forEach(k=>{ filters[k] = Array.isArray(filters[k]) ? [] : (k==='travelKm'?null:''); });
   document.querySelectorAll('.chip.active').forEach(c=>c.classList.remove('active'));
-  searchQ='';
+  searchQ='';batchState=null;renderBatchPanel();
   document.getElementById('search-desk').value='';
   document.getElementById('search-mob').value='';
+  ['search-desk','search-mob'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.height='auto';});
   document.getElementById('city-select-desk') && (document.getElementById('city-select-desk').value='');
   document.getElementById('city-select-mob') && (document.getElementById('city-select-mob').value='');
   document.getElementById('state-select-desk') && (document.getElementById('state-select-desk').value='');
@@ -2772,7 +2876,8 @@ function generateFilterReport(schools,fileLabel){
   fileLabel=fileLabel||'择校筛选结果';
   const now=new Date().toLocaleString('zh-CN');
   const filterDesc=[];
-  if(searchQ) filterDesc.push('关键词：'+searchQ);
+  if(batchState) filterDesc.push('批量学校名单：'+batchState.items.length+'行，匹配'+batchState.set.size+'所');
+  else if(searchQ) filterDesc.push('关键词：'+searchQ);
   if(filters.city.length) filterDesc.push('城市：'+filters.city.join('、'));
   if(filters.state.length) filterDesc.push('州：'+filters.state.join('、'));
   if(filters.region.length) filterDesc.push('地区：'+filters.region.join('、'));
